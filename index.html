@@ -333,6 +333,12 @@
       position:static;display:block;min-height:62dvh;overflow:visible;
       padding:26px 20px calc(90px + env(safe-area-inset-bottom));
     }
+    /* Laden und Fehler legen sich über alles, statt unter dem Text zu landen */
+    #busy,#fail{
+      position:fixed;inset:0;z-index:30;display:grid;place-items:center;
+      min-height:0;overflow-y:auto;
+      padding:28px 20px calc(60px + env(safe-area-inset-bottom));
+    }
     .card{margin:0 auto}
     .weiter,.stoerung{position:sticky;top:0}
     .card h1{font-size:1.55rem;line-height:1.25}
@@ -502,8 +508,11 @@
       </div>
 
       <div class="field">
-        <label>Diagnose</label>
-        <button class="ghost" id="bVoices">Stimmen im System</button>
+        <label>Diagnose <span id="verAnzeige" style="color:var(--marker)"></span></label>
+        <span style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="ghost" id="bVoices">Stimmen im System</button>
+          <button class="ghost" id="bFrisch">App neu laden</button>
+        </span>
       </div>
       <div class="field">
         <label>Datei</label>
@@ -563,6 +572,8 @@
         <p class="eyebrow">Text wird gelöst</p>
         <h1 id="busyLine">Seite 1</h1>
         <div class="bar"><i id="busyBar"></i></div>
+        <p class="sub" id="busyName" style="margin-top:14px;text-transform:none;
+           letter-spacing:.04em;word-break:break-word"></p>
       </div>
     </div>
 
@@ -595,6 +606,8 @@
 <script>
 (function(){
 "use strict";
+
+const APP_VERSION = 'v16';
 
 /* ══ Elemente ═══════════════════════════════════════════ */
 const $ = id => document.getElementById(id);
@@ -1433,6 +1446,7 @@ async function load(file, ausAblage){
   }
   stop(); enable(false); show('busy');
   el.busyLine.textContent = 'Datei wird geöffnet';
+  $('busyName').textContent = file.name;
   el.busyBar.style.width = '4%';
   try{
     const buf = await file.arrayBuffer();
@@ -1468,7 +1482,11 @@ async function load(file, ausAblage){
 
 /* ══ Bedienung ══════════════════════════════════════════ */
 el.bPick.onclick = el.bRetry.onclick = el.bNew.onclick = () => el.file.click();
-el.file.onchange = e => { const f = e.target.files[0]; e.target.value=''; load(f); };
+el.file.onchange = e => {
+  const f = (e.target.files || [])[0];
+  e.target.value = '';
+  if(f) load(f);
+};
 
 ['dragenter','dragover'].forEach(t => el.stage.addEventListener(t, e => {
   e.preventDefault(); el.stage.classList.add('dragging');
@@ -1894,6 +1912,23 @@ oberflaeche();
 
 $('bVoices').onclick = zeigeStimmenListe;
 
+$('verAnzeige').textContent = '· ' + APP_VERSION;
+
+$('bFrisch').onclick = async () => {
+  melde('Wird erneuert …');
+  try{
+    if('caches' in window){
+      const namen = await caches.keys();
+      await Promise.all(namen.map(n => caches.delete(n)));
+    }
+    if('serviceWorker' in navigator){
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r => r.unregister()));
+    }
+  }catch(e){}
+  location.reload(true);
+};
+
 /* ══ Bibliothek — PDFs dauerhaft im Gerät ════════════════ */
 const DB_NAME = 'vorleser-db', DB_STORE = 'buecher';
 let dbVerbindung = null;
@@ -2002,7 +2037,7 @@ async function zeigeBibliothek(){
   const info = document.createElement('p');
   info.style.cssText = 'margin:14px 0 0;font-family:var(--font-mono);font-size:9.5px;'
     + 'letter-spacing:.11em;text-transform:uppercase;color:#9A9384';
-  info.textContent = await speicherInfo();
+  info.textContent = (await speicherInfo()) + '   ·   App ' + APP_VERSION;
 
   if(!liste.length){
     el.sheetList.innerHTML = '<p class="sheet__leer">Noch keine Bücher abgelegt.<br>'
@@ -2063,7 +2098,8 @@ async function buecherEinlesen(dateien){
   if(!dateien || !dateien.length) return;
   if(!window.pdfjsLib){ melde('PDF-Bibliothek nicht geladen'); return; }
   const liste = Array.from(dateien).filter(f => /\.pdf$/i.test(f.name));
-  if(!liste.length){ melde('Keine PDF dabei'); return; }
+  if(!liste.length){ melde('Keine PDF erkannt — bitte erneut auswählen'); return; }
+  melde(liste.length + ' ' + (liste.length === 1 ? 'Buch' : 'Bücher') + ' werden eingelesen …');
 
   el.sheet.hidden = true;
   show('busy');
@@ -2073,7 +2109,8 @@ async function buecherEinlesen(dateien){
     const f = liste[i];
     el.busyLine.textContent = (i + 1) + ' von ' + liste.length;
     el.busyBar.style.width = Math.round(i / liste.length * 100) + '%';
-    await new Promise(r => setTimeout(r, 0));
+    $('busyName').textContent = f.name;
+    await new Promise(r => setTimeout(r, 30));
 
     try{
       const vorhanden = await dbTun('readonly', s => s.get(buchId(f.name, f.size)));
@@ -2110,9 +2147,14 @@ async function buecherEinlesen(dateien){
 }
 
 el.fileMulti.onchange = e => {
-  const d = e.target.files;
+  // Erst kopieren, dann leeren — sonst ist die Liste unter Safari weg
+  const d = Array.from(e.target.files || []);
   e.target.value = '';
-  buecherEinlesen(d);
+  melde(d.length + ' Dateien angekommen');
+  buecherEinlesen(d).catch(err => {
+    show(units.length ? 'doc' : 'empty');
+    stoerung('Import: ' + (err && err.message ? err.message : err));
+  });
 };
 
 el.bLib.onclick = zeigeBibliothek;
@@ -2234,7 +2276,15 @@ window.addEventListener('beforeunload', () => { try{ synth.cancel(); }catch(e){}
 /* ══ Als App auf dem Home-Bildschirm ═════════════════════ */
 if('serviceWorker' in navigator && location.protocol === 'https:'){
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').catch(()=>{});
+    navigator.serviceWorker.register('sw.js').then(reg => {
+      try{ reg.update(); }catch(e){}
+      let schonNeu = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if(schonNeu) return;
+        schonNeu = true;
+        location.reload();
+      });
+    }).catch(()=>{});
   });
 }
 const iOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
