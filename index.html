@@ -419,6 +419,7 @@
           <button class="chip chip--num" data-tempo="1.5" aria-pressed="false">1,5×</button>
         </div>
       </div>
+      <button class="ghost" id="bLib">Bibliothek <span id="libCount" style="opacity:.6"></span></button>
       <button class="ghost" id="bSheet">Sammlung <span id="markCount" style="opacity:.6"></span></button>
       <button class="ghost" id="bPanel" aria-pressed="false">Einstellungen</button>
     </div>
@@ -547,7 +548,7 @@
       <div class="card">
         <p class="eyebrow">PDF hierher ziehen</p>
         <h1>Lass dir vorlesen,<br>was du sonst lesen müsstest.</h1>
-        <p>Text wird direkt im Browser aus der PDF gelöst. Nichts wird hochgeladen.</p>
+        <p>Text wird direkt im Browser aus der PDF gelöst. Geladene Bücher bleiben dauerhaft im Gerät — auch ohne Internet.</p>
         <button class="cta" id="bPick">Datei wählen</button>
         <p class="sub" id="voiceNote">Stimmen werden geladen …</p>
         <p class="sub" id="installTipp" hidden style="margin-top:10px;color:#7C8CA0">
@@ -607,6 +608,7 @@ const el = {
   pitch:$('pitch'), bMark:$('bMark'), bSheet:$('bSheet'), sheet:$('sheet'),
   sheetList:$('sheetList'), bSheetZu:$('bSheetZu'), bExport:$('bExport'),
   markCount:$('markCount'), toast:$('toast'),
+  bLib:$('bLib'), libCount:$('libCount'),
   weiter:$('weiter'), weiterText:$('weiterText'),
   stoerung:$('stoerung'), stoerungText:$('stoerungText'),
   panel:$('panel'), bPanel:$('bPanel'), bExpand:$('bExpand'), bFollow:$('bFollow'),
@@ -1421,7 +1423,7 @@ function enable(on){
   [el.bPlay, el.bPrev, el.bNext, el.bStop, el.bMark].forEach(b => b.disabled = !on);
 }
 
-async function load(file){
+async function load(file, ausAblage){
   if(!file) return;
   if(!window.pdfjsLib){
     show('fail');
@@ -1433,7 +1435,8 @@ async function load(file){
   el.busyBar.style.width = '4%';
   try{
     const buf = await file.arrayBuffer();
-    pdfDoc = await pdfjsLib.getDocument({data:buf}).promise;
+    const fuerPdf = buf.slice(0);   // pdf.js verbraucht den Puffer
+    pdfDoc = await pdfjsLib.getDocument({data:fuerPdf}).promise;
     let title = file.name.replace(/\.pdf$/i,'');
     try{
       const meta = await pdfDoc.getMetadata();
@@ -1444,6 +1447,15 @@ async function load(file){
     el.pFrom.value = 1;
     el.pTo.value = pdfDoc.numPages;
     await build();
+    if(!ausAblage){
+      try{
+        const woerter = units.reduce((a,u) => a + u.text.split(/\s+/).length, 0);
+        await buchAblegen(file, buf, title, pdfDoc.numPages, woerter);
+        melde('In der Bibliothek abgelegt');
+      }catch(e){
+        melde('Konnte nicht dauerhaft abgelegt werden');
+      }
+    }
   }catch(err){
     show('fail');
     const locked = /password/i.test(String(err && err.message));
@@ -1878,6 +1890,172 @@ wolkeZeigen();
 oberflaeche();
 
 $('bVoices').onclick = zeigeStimmenListe;
+
+/* ══ Bibliothek — PDFs dauerhaft im Gerät ════════════════ */
+const DB_NAME = 'vorleser-db', DB_STORE = 'buecher';
+let dbVerbindung = null;
+
+function dbOeffnen(){
+  if(dbVerbindung) return Promise.resolve(dbVerbindung);
+  return new Promise((res, rej) => {
+    if(!window.indexedDB){ rej(new Error('Dieser Browser kann nichts dauerhaft ablegen')); return; }
+    const r = indexedDB.open(DB_NAME, 1);
+    r.onupgradeneeded = () => {
+      const d = r.result;
+      if(!d.objectStoreNames.contains(DB_STORE)) d.createObjectStore(DB_STORE, {keyPath:'id'});
+    };
+    r.onsuccess = () => { dbVerbindung = r.result; res(dbVerbindung); };
+    r.onerror = () => rej(r.error || new Error('Ablage nicht verfügbar'));
+  });
+}
+
+function dbTun(modus, arbeit){
+  return dbOeffnen().then(d => new Promise((res, rej) => {
+    const t = d.transaction(DB_STORE, modus);
+    const s = t.objectStore(DB_STORE);
+    let ergebnis;
+    try{ ergebnis = arbeit(s); }catch(e){ rej(e); return; }
+    t.oncomplete = () => res(ergebnis && ergebnis.result !== undefined ? ergebnis.result : ergebnis);
+    t.onerror = () => rej(t.error);
+    t.onabort = () => rej(t.error || new Error('Abbruch — vermutlich kein Speicher mehr frei'));
+  }));
+}
+
+const buchId = (name, groesse) => name.replace(/\.pdf$/i,'') + '|' + groesse;
+
+async function dauerhaftSichern(){
+  try{
+    if(!navigator.storage || !navigator.storage.persist) return false;
+    if(await navigator.storage.persisted()) return true;
+    return await navigator.storage.persist();
+  }catch(e){ return false; }
+}
+
+async function speicherInfo(){
+  try{
+    if(!navigator.storage || !navigator.storage.estimate) return '';
+    const e = await navigator.storage.estimate();
+    const mb = n => (n / 1048576).toFixed(n > 10485760 ? 0 : 1) + ' MB';
+    const fest = navigator.storage.persisted ? await navigator.storage.persisted() : false;
+    return mb(e.usage || 0) + ' belegt' + (e.quota ? ' von ' + mb(e.quota) : '')
+         + (fest ? '  ·  dauerhaft gesichert' : '  ·  nicht dauerhaft gesichert');
+  }catch(e){ return ''; }
+}
+
+async function buchAblegen(file, daten, titel, seiten, woerter){
+  const eintrag = {
+    id: buchId(file.name, file.size),
+    dateiname: file.name,
+    titel: titel,
+    seiten: seiten,
+    woerter: woerter || 0,
+    groesse: file.size,
+    daten: daten,
+    hinzu: new Date().toISOString(),
+    zuletzt: new Date().toISOString()
+  };
+  await dbTun('readwrite', s => s.put(eintrag));
+  await libZaehlen();
+  return eintrag;
+}
+
+function buecherHolen(){
+  return dbTun('readonly', s => s.getAll()).then(r => {
+    const liste = Array.isArray(r) ? r : (r && r.result) || [];
+    return liste.sort((a,b) => (b.zuletzt||'').localeCompare(a.zuletzt||''));
+  }).catch(() => []);
+}
+
+async function libZaehlen(){
+  const liste = await buecherHolen();
+  el.libCount.textContent = liste.length ? '· ' + liste.length : '';
+}
+
+async function buchOeffnen(eintrag){
+  el.sheet.hidden = true;
+  try{
+    await dbTun('readwrite', s => {
+      eintrag.zuletzt = new Date().toISOString();
+      s.put(eintrag);
+    });
+  }catch(e){}
+  const blob = eintrag.daten instanceof Blob ? eintrag.daten : new Blob([eintrag.daten]);
+  const datei = new File([blob], eintrag.dateiname || (eintrag.titel + '.pdf'),
+                         {type:'application/pdf'});
+  load(datei, true);
+}
+
+async function zeigeBibliothek(){
+  $('sheetTitel').textContent = 'Bibliothek';
+  el.bExport.hidden = true;
+  el.sheetList.innerHTML = '<p class="sheet__leer">Wird geladen …</p>';
+  el.sheet.hidden = false;
+
+  const liste = await buecherHolen();
+  el.sheetList.innerHTML = '';
+
+  const info = document.createElement('p');
+  info.style.cssText = 'margin:14px 0 0;font-family:var(--font-mono);font-size:9.5px;'
+    + 'letter-spacing:.11em;text-transform:uppercase;color:#9A9384';
+  info.textContent = await speicherInfo();
+
+  if(!liste.length){
+    el.sheetList.innerHTML = '<p class="sheet__leer">Noch keine Bücher abgelegt.<br>'
+      + 'Lade eine PDF — sie bleibt danach dauerhaft im Gerät, auch ohne Internet.</p>';
+    el.sheetList.appendChild(info);
+    return;
+  }
+
+  const staende = standAlle();
+  const box = document.createElement('div');
+  box.className = 'book';
+  liste.forEach(b => {
+    const stand = Object.keys(staende).map(k => staende[k])
+      .filter(s => s.titel === b.titel).sort((a,c) =>
+        (c.wann||'').localeCompare(a.wann||''))[0];
+    const pct = stand ? Math.round(stand.idx / Math.max(1, stand.gesamt) * 100) : 0;
+
+    const d = document.createElement('div');
+    d.className = 'mark';
+    d.style.cursor = 'pointer';
+    d.style.fontFamily = 'var(--font-read)';
+    d.textContent = b.titel;
+    if(pct === 0) d.style.borderLeftColor = '#CFC9BC';
+
+    const f = document.createElement('div');
+    f.className = 'mark__foot';
+    const a = document.createElement('span');
+    const teile = [b.seiten + ' Seiten'];
+    if(b.woerter) teile.push(b.woerter.toLocaleString('de-DE') + ' Wörter');
+    teile.push((b.groesse / 1048576).toFixed(1) + ' MB');
+    if(stand) teile.push(pct + ' % · Seite ' + stand.seite);
+    a.textContent = teile.join('  ·  ');
+    f.appendChild(a);
+
+    const w = document.createElement('button');
+    w.textContent = 'Entfernen';
+    w.onclick = async ev => {
+      ev.stopPropagation();
+      try{
+        await dbTun('readwrite', s => s.delete(b.id));
+        await libZaehlen();
+        zeigeBibliothek();
+        melde('Entfernt');
+      }catch(e){ melde('Entfernen fehlgeschlagen'); }
+    };
+    f.appendChild(w);
+
+    d.appendChild(f);
+    d.onclick = () => buchOeffnen(b);
+    box.appendChild(d);
+  });
+  el.sheetList.appendChild(box);
+  el.sheetList.appendChild(info);
+}
+
+el.bLib.onclick = zeigeBibliothek;
+dauerhaftSichern();
+libZaehlen();
 
 /* ══ Lesestand ═══════════════════════════════════════════ */
 const STAND = 'vorleser.stand';
