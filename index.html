@@ -311,14 +311,30 @@
       max-width:100%;
     }
 
-    /* Leerzustand: scrollbar und nicht von der Safari-Leiste verschluckt */
+    /* ── Handy: die ganze Seite scrollt, nicht ein Kasten darin ──
+       Feste Bildschirmhöhe mit innerem Scrollbereich ist auf iOS
+       unzuverlässig. Deshalb hier normaler Dokumentenfluss. */
+    html,body{height:auto;overflow:visible;overscroll-behavior:auto}
+    body{-webkit-overflow-scrolling:touch}
+    .app{height:auto;min-height:100dvh}
+
+    .console{
+      position:sticky;top:0;max-height:none;overflow:visible;
+      box-shadow:0 6px 18px rgba(0,0,0,.35);
+    }
+    .panel{max-height:58dvh;overflow-y:auto;-webkit-overflow-scrolling:touch}
+
+    .stage{display:block;min-height:55dvh;position:relative}
+    .spine{display:none}
+    .scroller{overflow:visible;height:auto;min-height:0}
+    .doc{padding:24px 16px calc(40vh + env(safe-area-inset-bottom))}
+
     .center{
-      display:block;overflow-y:auto;-webkit-overflow-scrolling:touch;
-      overscroll-behavior:contain;
-      padding:26px 20px calc(150px + env(safe-area-inset-bottom));
+      position:static;display:block;min-height:62dvh;overflow:visible;
+      padding:26px 20px calc(90px + env(safe-area-inset-bottom));
     }
     .card{margin:0 auto}
-    .console{max-height:72dvh}
+    .weiter,.stoerung{position:sticky;top:0}
     .card h1{font-size:1.55rem;line-height:1.25}
     .card p{font-size:13.5px;margin-bottom:20px}
     .card .sub{font-size:9px;letter-spacing:.09em}
