@@ -1,6 +1,6 @@
 /* Service Worker — macht die App offline lauffähig.
    Version hochzählen, wenn du index.html änderst. */
-const VERSION = 'vorleser-v20';
+const VERSION = 'vorleser-v24';
 const KERN = [
   './',
   './index.html',

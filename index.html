@@ -238,6 +238,9 @@
   .figur canvas{width:100%;flex:1 1 100%;display:block;margin-top:6px;
     border-radius:6px;border:1px solid #DCD8CF;background:#fff}
 
+  .abs{color:var(--ink-soft);opacity:.82;cursor:pointer;transition:opacity .2s}
+  .abs.done{opacity:.45}
+  .abs:hover{opacity:1}
   .sent{
     color:var(--ink-soft);opacity:.78;cursor:pointer;border-radius:3px;
     transition:opacity .2s,color .2s,background .2s;
@@ -480,6 +483,8 @@
         <span style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="ghost" id="bFollow" aria-pressed="true">Text mitlaufen lassen</button>
           <button class="ghost" id="bFiguren" aria-pressed="false">Abbildungen anzeigen</button>
+          <button class="ghost" id="bTitelei" aria-pressed="true">Titelei überspringen</button>
+          <button class="ghost" id="bAnfang">Zum Textanfang</button>
         </span>
       </div>
       <div class="field" style="flex:1 1 100%;border-top:1px solid var(--line);padding-top:14px;margin-top:2px">
@@ -558,6 +563,13 @@
       <button class="dunkel" id="bStoerungZu" style="border-color:#D3A797;color:#7A4230">OK</button>
     </div>
 
+    <div class="weiter" id="abschnitt" hidden style="background:#E8EEF0;border-bottom-color:#BFD2D6;color:#24454A">
+      <span id="abschnittText"></span>
+      <button class="dunkel" id="bAbZurueck" style="border-color:#A9C2C6;color:#24454A">‹ Zurück</button>
+      <button class="cta" id="bAbVor" style="padding:9px 17px;font-size:13.5px">Weiter ›</button>
+      <button class="dunkel" id="bAbAlles" style="border-color:#A9C2C6;color:#24454A">Alles laden</button>
+    </div>
+
     <div class="weiter" id="weiter" hidden>
       <span id="weiterText"></span>
       <button class="cta" id="bWeiter">Weiterlesen</button>
@@ -585,11 +597,12 @@
     <!-- Ladezustand -->
     <div class="center" id="busy" hidden>
       <div class="card">
-        <p class="eyebrow">Text wird gelöst</p>
+        <p class="eyebrow" id="busyTitel">Text wird gelöst</p>
         <h1 id="busyLine">Seite 1</h1>
         <div class="bar"><i id="busyBar"></i></div>
         <p class="sub" id="busyName" style="margin-top:14px;text-transform:none;
            letter-spacing:.04em;word-break:break-word"></p>
+        <p style="margin-top:20px"><button class="dunkel" id="bAbbruch">Abbrechen</button></p>
       </div>
     </div>
 
@@ -623,7 +636,7 @@
 (function(){
 "use strict";
 
-const APP_VERSION = 'v19';
+const APP_VERSION = 'v23';
 
 /* ══ Elemente ═══════════════════════════════════════════ */
 const $ = id => document.getElementById(id);
@@ -640,6 +653,7 @@ const el = {
   markCount:$('markCount'), toast:$('toast'),
   bLib:$('bLib'), libCount:$('libCount'), fileMulti:$('fileMulti'),
   weiter:$('weiter'), weiterText:$('weiterText'),
+  abschnitt:$('abschnitt'), abschnittText:$('abschnittText'),
   stoerung:$('stoerung'), stoerungText:$('stoerungText'),
   panel:$('panel'), bPanel:$('bPanel'), bExpand:$('bExpand'), bFollow:$('bFollow'),
   bNew:$('bNew'), bTxt:$('bTxt'), bPick:$('bPick'), bRetry:$('bRetry'),
@@ -660,7 +674,8 @@ if(window.pdfjsLib){
 /* ══ Zustand ════════════════════════════════════════════ */
 let pdfDoc = null;
 let units = [];          // [{text, speak, page, para}]
-let nodes = [];          // zugehörige DOM-Elemente
+let absaetze = [];       // [{el, von, bis, texte}] — ein Element je Absatz
+let aktAbsatz = -1;      // welcher Absatz gerade markiert ist
 let idx = 0;             // aktueller Satz
 let mode = 'idle';       // idle | playing | paused
 let gen = 0;             // Generationszähler gegen verwaiste Rückrufe
@@ -673,6 +688,11 @@ let aktiv = 0;                // 0 = Stimme A, 1 = Stimme B
 let marken = [];              // gemerkte Sätze
 let userScrolled = false, scrollLock = false;
 let figuren = {};            // Seite -> Anzahl Abbildungen
+let abbruch = false;         // Ladevorgang abbrechen
+let ueberspringeTitelei = true;   // Titelei automatisch überspringen
+let uebersprungen = 0;            // Seite, an der begonnen wurde
+const GROSS = 150;           // ab so vielen Seiten abschnittsweise
+const BLOCK = 100;           // Seiten je Abschnitt
 let zeigeFiguren = false;    // Standard aus — hält das Einlesen schnell
 
 /* ══ Textwerkzeuge ══════════════════════════════════════ */
@@ -957,7 +977,13 @@ async function build(){
 
   const colMode = el.cols.value;
   const pages = [];
+  abbruch = false;
   for(let n=from;n<=to;n++){
+    if(abbruch){
+      show(units.length ? 'doc' : 'empty');
+      melde('Abgebrochen');
+      return;
+    }
     const page = await pdfDoc.getPage(n);
     const r = await pageLines(page, colMode);
     let figuren = 0;
@@ -967,7 +993,7 @@ async function build(){
     pages.push({n, lines:r.lines, figuren:figuren});
     el.busyLine.textContent = 'Seite ' + n;
     el.busyBar.style.width = Math.round((n-from+1)/(to-from+1)*100) + '%';
-    if((n-from) % 4 === 0) await new Promise(r=>setTimeout(r,0));
+    if((n-from) % 3 === 0) await new Promise(r=>setTimeout(r,0));
   }
 
   const drop = repeatKeys(pages);
@@ -995,12 +1021,21 @@ async function build(){
     return;
   }
 
+  abschnittZeigen(from, to, total);
   render();
   idx = 0;
+  if(ueberspringeTitelei){
+    const start = ersterFliesstext();
+    if(start > 0){
+      idx = start;
+      uebersprungen = units[start].page;
+    } else uebersprungen = 0;
+  } else uebersprungen = 0;
   show('doc');
   enable(true);
   paint();
   standAnbieten();
+  if(uebersprungen > 1 && el.weiter.hidden) titeleiHinweis();
 }
 
 function wolkeLeeren(){
@@ -1011,8 +1046,9 @@ function wolkeLeeren(){
 
 function render(){
   const frag = document.createDocumentFragment();
-  nodes = [];
-  let page = -1, para = -1, p = null;
+  absaetze = [];
+  aktAbsatz = -1;
+  let page = -1, para = -1, eintrag = null;
 
   units.forEach((u,i) => {
     if(u.page !== page){
@@ -1025,23 +1061,126 @@ function render(){
     }
     if(u.para !== para){
       para = u.para;
-      p = document.createElement('p');
+      const p = document.createElement('p');
+      p.className = 'abs';
+      p.dataset.von = i;
+      eintrag = {el:p, von:i, bis:i, texte:[]};
+      absaetze.push(eintrag);
       frag.appendChild(p);
     }
-    const s = document.createElement('span');
-    s.className = 'sent';
-    s.tabIndex = 0;
-    s.textContent = u.text + ' ';
-    s.addEventListener('click', () => jump(i, mode==='playing'));
-    s.addEventListener('keydown', e => { if(e.key==='Enter'){ e.preventDefault(); jump(i,true); } });
-    p.appendChild(s);
-    nodes.push(s);
+    eintrag.bis = i;
+    eintrag.texte.push(u.text);
   });
+
+  // Reiner Text statt tausender Einzelelemente — das spart den Speicher
+  absaetze.forEach(a => { a.el.textContent = a.texte.join(' '); });
 
   el.doc.innerHTML = '';
   el.doc.appendChild(frag);
   buildSpine();
 }
+
+/* Ein einziger Zuhörer für das ganze Dokument statt einer je Satz */
+el.doc.addEventListener('click', e => {
+  const p = e.target.closest ? e.target.closest('p.abs') : null;
+  if(!p || !units.length) return;
+  jump(parseInt(p.dataset.von, 10) || 0, mode === 'playing');
+});
+
+/* Erkennt echten Fließtext — Titelseiten, Impressum, Inhalts-
+   und Literaturverzeichnisse fallen durch. */
+function istFliesstext(t){
+  if(!t || t.length < 220) return false;
+  if(t.split(/\s+/).length < 40) return false;
+  const ziffern = (t.match(/\d/g) || []).length;
+  if(ziffern / t.length > 0.055) return false;              // Verzeichnisse, Tabellen
+  const gross = (t.match(/[A-ZÄÖÜ]/g) || []).length;
+  if(gross / t.length > 0.20) return false;                 // Titel in Versalien
+  if((t.match(/[.!?]/g) || []).length < 2) return false;     // keine echten Sätze
+  if(/\b(ISBN|All rights reserved|Alle Rechte vorbehalten|Copyright|©|Printed in)\b/i.test(t))
+    return false;                                            // Impressum
+  const punkteJeWort = (t.match(/[.!?]/g) || []).length / t.split(/\s+/).length;
+  if(punkteJeWort > 0.22) return false;                      // Stichwortlisten
+  return true;
+}
+
+/* Erster Absatz, bei dem auch der folgende Fließtext ist —
+   sonst würde ein Klappentext auf der Rückseite reichen. */
+function ersterFliesstext(){
+  if(!absaetze.length) return 0;
+  for(let k = 0; k < absaetze.length - 1; k++){
+    const a = absaetze[k].texte.join(' ');
+    if(!istFliesstext(a)) continue;
+    const b = absaetze[k+1].texte.join(' ');
+    if(istFliesstext(b) || absaetze[k+1].texte.join(' ').length > 400)
+      return absaetze[k].von;
+  }
+  for(let k = 0; k < absaetze.length; k++)
+    if(absaetze[k].texte.join(' ').length > 200) return absaetze[k].von;
+  return 0;
+}
+
+function zumTextanfang(){
+  if(!units.length) return;
+  const i = ersterFliesstext();
+  jump(i, false);
+  melde(i > 0 ? 'Textanfang — Seite ' + units[i].page : 'Schon am Anfang');
+}
+
+function absatzFuer(i){
+  let lo = 0, hi = absaetze.length - 1;
+  while(lo <= hi){
+    const m = (lo + hi) >> 1;
+    if(i < absaetze[m].von) hi = m - 1;
+    else if(i > absaetze[m].bis) lo = m + 1;
+    else return m;
+  }
+  return -1;
+}
+
+function titeleiHinweis(){
+  el.weiterText.innerHTML = 'Titelei übersprungen — Start auf <b>Seite '
+    + uebersprungen + '</b>';
+  $('bWeiter').textContent = 'Passt';
+  $('bVonVorn').textContent = 'Doch von Seite 1';
+  el.weiter.dataset.idx = idx;
+  el.weiter.hidden = false;
+}
+
+function abschnittZeigen(von, bis, gesamt){
+  if(gesamt <= GROSS || (von === 1 && bis === gesamt)){
+    el.abschnitt.hidden = true;
+    return;
+  }
+  const nr = Math.floor((von - 1) / BLOCK) + 1;
+  const wieviele = Math.ceil(gesamt / BLOCK);
+  el.abschnittText.innerHTML = 'Großes Buch — geladen ist <b>Seite ' + von + ' bis ' + bis
+    + '</b> von ' + gesamt + '  ·  Abschnitt ' + nr + ' von ' + wieviele;
+  $('bAbZurueck').disabled = von <= 1;
+  $('bAbVor').disabled = bis >= gesamt;
+  el.abschnitt.hidden = false;
+}
+
+function abschnittWechseln(richtung){
+  if(!pdfDoc) return;
+  const gesamt = pdfDoc.numPages;
+  const von = parseInt(el.pFrom.value, 10) || 1;
+  let neu = von + richtung * BLOCK;
+  neu = Math.max(1, Math.min(gesamt, neu));
+  el.pFrom.value = neu;
+  el.pTo.value = Math.min(gesamt, neu + BLOCK - 1);
+  build();
+}
+
+$('bAbVor').onclick = () => abschnittWechseln(1);
+$('bAbZurueck').onclick = () => abschnittWechseln(-1);
+$('bAbAlles').onclick = () => {
+  if(!pdfDoc) return;
+  el.pFrom.value = 1;
+  el.pTo.value = pdfDoc.numPages;
+  melde('Das kann bei diesem Umfang dauern');
+  build();
+};
 
 function figurHinweis(nr, anzahl){
   const d = document.createElement('div');
@@ -1093,31 +1232,44 @@ function buildSpine(){
 
 /* ══ Anzeige ════════════════════════════════════════════ */
 function paint(){
-  nodes.forEach((n,i) => {
-    n.classList.toggle('done', i < idx);
-    if(i !== idx && n.classList.contains('now')){
-      n.classList.remove('now');
-      n.textContent = units[i].text + ' ';
+  const nr = absatzFuer(idx);
+
+  if(nr !== aktAbsatz){
+    // alten Absatz auf reinen Text zurücksetzen
+    if(aktAbsatz >= 0 && absaetze[aktAbsatz]){
+      const alt = absaetze[aktAbsatz];
+      alt.el.textContent = alt.texte.join(' ');
     }
-  });
-  const cur = nodes[idx];
-  if(cur && !cur.classList.contains('now')){
-    cur.classList.add('now');
-    tokenize(cur, units[idx].text);
+    absaetze.forEach((x,k) => x.el.classList.toggle('done', k < nr));
+    aktAbsatz = nr;
+  }
+
+  let marke = null;
+  if(nr >= 0){
+    const a = absaetze[nr];
+    const k = idx - a.von;
+    const vor = a.texte.slice(0, k).join(' ');
+    const nach = a.texte.slice(k + 1).join(' ');
+    a.el.textContent = '';
+    if(vor) a.el.appendChild(document.createTextNode(vor + ' '));
+    marke = document.createElement('span');
+    marke.className = 'sent now';
+    a.el.appendChild(marke);
+    tokenize(marke, units[idx].text);
+    if(nach) a.el.appendChild(document.createTextNode(' ' + nach));
   }
 
   const pct = units.length ? idx/(units.length-1||1) : 0;
   el.spineHead.style.top = 'calc(22px + ' + pct + ' * (100% - 44px))';
   el.spineFill.style.height = 'calc(' + pct + ' * (100% - 44px))';
 
-  const words = units.reduce((a,u)=>a + u.text.split(/\s+/).length, 0);
-  const left = units.slice(idx).reduce((a,u)=>a + u.text.split(/\s+/).length, 0);
-  const mins = Math.max(1, Math.round(left / (155 * tempo)));
+  const mins = Math.max(1, Math.round((units.length - idx) * 0.9 / (155 * tempo) * 10));
   el.counters.innerHTML = 'Satz <b>' + (idx+1) + '/' + units.length + '</b><span class="dot">·</span>' +
     'Seite <b>' + (units[idx] ? units[idx].page : '—') + '</b><span class="dot">·</span>' +
-    '<b>' + Math.round(idx / Math.max(1, units.length - 1) * 100) + ' %</b><span class="dot">·</span>noch <b>~' + mins + ' min</b><span class="dot">·</span><b>' + words.toLocaleString('de-DE') + '</b> Wörter';
+    '<b>' + Math.round(idx / Math.max(1, units.length - 1) * 100) + ' %</b>' +
+    '<span class="dot">·</span>noch <b>~' + mins + ' min</b>';
 
-  if(follow && !userScrolled && cur) scrollTo(cur);
+  if(follow && !userScrolled && marke) scrollTo(marke);
   sperrbildschirm();
   standSichern(false);
 }
@@ -1138,7 +1290,7 @@ function tokenize(node, text){
 }
 
 function markWord(charIndex){
-  const cur = nodes[idx];
+  const cur = el.doc.querySelector('.sent.now');
   if(!cur) return;
   const ws = cur.querySelectorAll('.w');
   let hit = null;
@@ -1306,6 +1458,7 @@ function stoerung(roh){
   el.stoerung.hidden = false;
 }
 $('bStoerungZu').onclick = () => { el.stoerung.hidden = true; };
+$('bAbbruch').onclick = () => { abbruch = true; };
 
 async function wolkeSpiel(my){
   if(my !== gen) return;
@@ -1388,7 +1541,7 @@ function stop(){
   try{ synth.cancel(); }catch(e){}
   try{ audio.pause(); }catch(e){}
   icons();
-  const cur = nodes[idx];
+  const cur = el.doc.querySelector('.sent.now');
   if(cur) cur.querySelectorAll('.w.on').forEach(w=>w.classList.remove('on'));
 }
 function jump(to, keepPlaying){
@@ -1538,23 +1691,27 @@ async function load(file, ausAblage){
     el.failText.innerHTML = '<b>Die PDF-Bibliothek konnte nicht geladen werden.</b>Beim ersten Öffnen braucht die Seite kurz Internet, um pdf.js nachzuladen. Seite neu laden und noch einmal versuchen.';
     return;
   }
-  stop(); enable(false); show('busy');
+  stop(); enable(false);
+  $('busyTitel').textContent = 'Text wird gelöst';
+  show('busy');
   el.busyLine.textContent = 'Datei wird geöffnet';
   $('busyName').textContent = file.name;
   el.busyBar.style.width = '4%';
   try{
-    const buf = await file.arrayBuffer();
+    let buf = await file.arrayBuffer();
     const fuerPdf = buf.slice(0);   // pdf.js verbraucht den Puffer
     pdfDoc = await pdfjsLib.getDocument({data:fuerPdf}).promise;
-    let title = file.name.replace(/\.pdf$/i,'');
+    let title = titelSaeubern('', file.name);
     try{
       const meta = await pdfDoc.getMetadata();
-      if(meta && meta.info && meta.info.Title && meta.info.Title.trim().length > 2) title = meta.info.Title.trim();
+      title = titelSaeubern(meta && meta.info ? meta.info.Title : '', file.name);
     }catch(e){}
     el.docTitle.textContent = title + ' · ' + pdfDoc.numPages + ' Seiten';
     el.pFrom.max = el.pTo.max = pdfDoc.numPages;
     el.pFrom.value = 1;
-    el.pTo.value = pdfDoc.numPages;
+    el.pTo.value = pdfDoc.numPages > GROSS ? BLOCK : pdfDoc.numPages;
+    if(pdfDoc.numPages > GROSS)
+      melde(pdfDoc.numPages + ' Seiten — wird abschnittsweise geladen');
     await build();
     if(!ausAblage){
       try{
@@ -1565,6 +1722,7 @@ async function load(file, ausAblage){
         melde('Konnte nicht dauerhaft abgelegt werden');
       }
     }
+    buf = null;   // Speicher sofort wieder freigeben
   }catch(err){
     show('fail');
     const locked = /password/i.test(String(err && err.message));
@@ -1676,7 +1834,8 @@ el.bFollow.onclick = () => {
   follow = !follow;
   userScrolled = false;
   el.bFollow.setAttribute('aria-pressed', String(follow));
-  if(follow && nodes[idx]) scrollTo(nodes[idx]);
+  const m = el.doc.querySelector('.sent.now');
+  if(follow && m) scrollTo(m);
 };
 el.bExpand.onclick = () => {
   expand = !expand;
@@ -1699,6 +1858,19 @@ try{
     $('bFiguren').setAttribute('aria-pressed', 'true');
   }
 }catch(e){}
+$('bTitelei').onclick = () => {
+  ueberspringeTitelei = !ueberspringeTitelei;
+  $('bTitelei').setAttribute('aria-pressed', String(ueberspringeTitelei));
+  try{ localStorage.setItem('vorleser.titelei', ueberspringeTitelei ? '1' : '0'); }catch(e){}
+  melde(ueberspringeTitelei ? 'Titelei wird übersprungen' : 'Beginnt jetzt bei Seite 1');
+};
+try{
+  if(localStorage.getItem('vorleser.titelei') === '0'){
+    ueberspringeTitelei = false;
+    $('bTitelei').setAttribute('aria-pressed', 'false');
+  }
+}catch(e){}
+$('bAnfang').onclick = zumTextanfang;
 el.cols.onchange = build;
 el.pFrom.onchange = el.pTo.onchange = build;
 
@@ -2074,6 +2246,23 @@ function dbTun(modus, arbeit){
   }));
 }
 
+/* Viele PDFs tragen Dateipfade oder Programmnamen als Titel.
+   Dann ist der Dateiname die bessere Wahl. */
+function titelSaeubern(roh, dateiname){
+  const ersatz = (dateiname || '').replace(/\.pdf$/i, '').replace(/[_]+/g, ' ').trim()
+                 || 'Ohne Titel';
+  if(!roh) return ersatz;
+  let t = String(roh).trim();
+  if(t.length < 3) return ersatz;
+  if(/^(file:|https?:|ftp:|[A-Za-z]:[\\\/]|[\\\/])/i.test(t)) return ersatz;   // Pfad oder Adresse
+  if(/%[0-9A-F]{2}/i.test(t)) return ersatz;                                    // kodierte Adresse
+  if(/\.(txt|docx?|pdf|indd|qxd|rtf|tex|odt)\s*$/i.test(t)) return ersatz;       // Dateiname
+  if(/^(untitled|unbenannt|dokument\d*|document\d*|microsoft word|print|layout|druck)/i.test(t))
+    return ersatz;
+  if(/[\\\/]{2,}/.test(t)) return ersatz;
+  return t;
+}
+
 const buchId = (name, groesse) => name.replace(/\.pdf$/i,'') + '|' + groesse;
 
 async function dauerhaftSichern(){
@@ -2157,11 +2346,30 @@ async function zeigeBibliothek(){
     + 'letter-spacing:.11em;text-transform:uppercase;color:#9A9384';
   info.textContent = (await speicherInfo()) + '   ·   App ' + APP_VERSION;
 
+  let fest = true;
+  try{ fest = navigator.storage && navigator.storage.persisted
+              ? await navigator.storage.persisted() : true; }catch(e){}
+  let warnung = null;
+  if(!fest){
+    await dauerhaftSichern();                       // nochmal versuchen
+    try{ fest = await navigator.storage.persisted(); }catch(e){}
+  }
+  if(!fest){
+    warnung = document.createElement('div');
+    warnung.className = 'alert';
+    warnung.style.margin = '16px 0 0';
+    warnung.innerHTML = '<b>Deine Bücher sind nicht dauerhaft gesichert</b>'
+      + 'iOS darf sie wegräumen, wenn der Speicher knapp wird. '
+      + 'Leg die App über Teilen → Zum Home-Bildschirm an und starte sie künftig über das Icon — '
+      + 'dann wird die Garantie in aller Regel erteilt.';
+  }
+
   if(!liste.length){
     el.sheetList.innerHTML = '<p class="sheet__leer">Noch keine Bücher abgelegt.<br>'
       + 'Oben auf „Bücher hinzufügen" tippen — du kannst mehrere auf einmal auswählen. '
       + 'Sie bleiben dauerhaft im Gerät, auch ohne Internet.</p>';
     el.sheetList.appendChild(info);
+    if(warnung) el.sheetList.appendChild(warnung);
     return;
   }
 
@@ -2210,6 +2418,7 @@ async function zeigeBibliothek(){
   });
   el.sheetList.appendChild(box);
   el.sheetList.appendChild(info);
+  if(warnung) el.sheetList.appendChild(warnung);
 }
 
 async function buecherEinlesen(dateien){
@@ -2220,6 +2429,7 @@ async function buecherEinlesen(dateien){
   melde(liste.length + ' ' + (liste.length === 1 ? 'Buch' : 'Bücher') + ' werden eingelesen …');
 
   el.sheet.hidden = true;
+  $('busyTitel').textContent = 'Bücher werden abgelegt';
   show('busy');
   let fertig = 0, uebersprungen = 0, fehler = 0;
 
@@ -2240,11 +2450,10 @@ async function buecherEinlesen(dateien){
       const buf = await f.arrayBuffer();
       const fuerPdf = buf.slice(0);
       const doc = await pdfjsLib.getDocument({data: fuerPdf}).promise;
-      let titel = f.name.replace(/\.pdf$/i, '');
+      let titel = titelSaeubern('', f.name);
       try{
         const meta = await doc.getMetadata();
-        if(meta && meta.info && meta.info.Title && meta.info.Title.trim().length > 2)
-          titel = meta.info.Title.trim();
+        titel = titelSaeubern(meta && meta.info ? meta.info.Title : '', f.name);
       }catch(e){}
       const seiten = doc.numPages;
       doc.destroy();
@@ -2315,6 +2524,8 @@ function standAnbieten(){
     {hour:'2-digit', minute:'2-digit'});
   el.weiterText.innerHTML = 'Du warst auf <b>Seite ' + s.seite + '</b> — <b>'
     + pct + ' %</b> gelesen' + datum;
+  $('bWeiter').textContent = 'Weiterlesen';
+  $('bVonVorn').textContent = 'Von vorn';
   el.weiter.hidden = false;
   el.weiter.dataset.idx = s.idx;
 }
