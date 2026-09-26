@@ -226,6 +226,18 @@
   .pagemark::before,.pagemark::after{content:"";height:1px;background:#D6D1C6;flex:1}
   .pagemark span{font-family:var(--font-mono);font-size:9.5px;letter-spacing:.2em;text-transform:uppercase;color:#9A9384}
 
+  .figur{
+    display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+    margin:1.6em 0;padding:11px 14px;cursor:pointer;
+    background:var(--paper-2);border:1px dashed #CFC9BC;border-radius:8px;
+    font-family:var(--font-mono);font-size:10px;letter-spacing:.13em;
+    text-transform:uppercase;color:#8A8371;transition:.15s;
+  }
+  .figur:hover{border-color:var(--petrol);color:var(--petrol)}
+  .figur svg{width:15px;height:15px;fill:currentColor;flex:0 0 auto}
+  .figur canvas{width:100%;flex:1 1 100%;display:block;margin-top:6px;
+    border-radius:6px;border:1px solid #DCD8CF;background:#fff}
+
   .sent{
     color:var(--ink-soft);opacity:.78;cursor:pointer;border-radius:3px;
     transition:opacity .2s,color .2s,background .2s;
@@ -465,7 +477,10 @@
       </div>
       <div class="field">
         <label>Ansicht</label>
-        <button class="ghost" id="bFollow" aria-pressed="true">Text mitlaufen lassen</button>
+        <span style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="ghost" id="bFollow" aria-pressed="true">Text mitlaufen lassen</button>
+          <button class="ghost" id="bFiguren" aria-pressed="false">Abbildungen anzeigen</button>
+        </span>
       </div>
       <div class="field" style="flex:1 1 100%;border-top:1px solid var(--line);padding-top:14px;margin-top:2px">
         <label style="color:var(--marker)">Cloud-Stimme — die guten Stimmen</label>
@@ -608,7 +623,7 @@
 (function(){
 "use strict";
 
-const APP_VERSION = 'v17';
+const APP_VERSION = 'v19';
 
 /* ══ Elemente ═══════════════════════════════════════════ */
 const $ = id => document.getElementById(id);
@@ -657,6 +672,8 @@ let slot = {de:[null,null], en:[null,null]};   // je zwei Stimmen
 let aktiv = 0;                // 0 = Stimme A, 1 = Stimme B
 let marken = [];              // gemerkte Sätze
 let userScrolled = false, scrollLock = false;
+let figuren = {};            // Seite -> Anzahl Abbildungen
+let zeigeFiguren = false;    // Standard aus — hält das Einlesen schnell
 
 /* ══ Textwerkzeuge ══════════════════════════════════════ */
 const SP = '\u0001'; // Platzhalter für geschützte Punkte
@@ -848,6 +865,42 @@ async function pageLines(page, colMode){
   return {lines:built, width:vp.width};
 }
 
+/* Findet echte Abbildungen — Logos, Linien und Hintergründe fliegen raus.
+   Die Lage kommt aus der Transformationsmatrix, die pdf.js mitliefert. */
+async function pageFiguren(page){
+  if(!window.pdfjsLib || !pdfjsLib.OPS) return 0;
+  let liste;
+  try{ liste = await page.getOperatorList(); }catch(e){ return 0; }
+  const vp = page.getViewport({scale:1});
+  const OPS = pdfjsLib.OPS;
+  const malen = [OPS.paintImageXObject, OPS.paintJpegXObject,
+                 OPS.paintImageMaskXObject, OPS.paintInlineImageXObject];
+
+  const mul = (a,b) => [
+    a[0]*b[0]+a[2]*b[1], a[1]*b[0]+a[3]*b[1],
+    a[0]*b[2]+a[2]*b[3], a[1]*b[2]+a[3]*b[3],
+    a[0]*b[4]+a[2]*b[5]+a[4], a[1]*b[4]+a[3]*b[5]+a[5]
+  ];
+
+  let ctm = [1,0,0,1,0,0];
+  const stapel = [];
+  let treffer = 0;
+
+  for(let i = 0; i < liste.fnArray.length; i++){
+    const fn = liste.fnArray[i];
+    if(fn === OPS.save){ stapel.push(ctm.slice()); continue; }
+    if(fn === OPS.restore){ ctm = stapel.pop() || [1,0,0,1,0,0]; continue; }
+    if(fn === OPS.transform){ ctm = mul(ctm, liste.argsArray[i]); continue; }
+    if(malen.indexOf(fn) === -1) continue;
+
+    const b = Math.abs(ctm[0]) + Math.abs(ctm[2]);
+    const hh = Math.abs(ctm[1]) + Math.abs(ctm[3]);
+    // nur was groß genug ist, um wirklich eine Abbildung zu sein
+    if(b > vp.width * 0.18 && hh > vp.height * 0.07) treffer++;
+  }
+  return treffer;
+}
+
 // wiederkehrende Kopf-/Fußzeilen finden
 function repeatKeys(pages){
   const tally = {};
@@ -907,13 +960,19 @@ async function build(){
   for(let n=from;n<=to;n++){
     const page = await pdfDoc.getPage(n);
     const r = await pageLines(page, colMode);
-    pages.push({n, lines:r.lines});
+    let figuren = 0;
+    if(zeigeFiguren){
+      try{ figuren = await pageFiguren(page); }catch(e){}
+    }
+    pages.push({n, lines:r.lines, figuren:figuren});
     el.busyLine.textContent = 'Seite ' + n;
     el.busyBar.style.width = Math.round((n-from+1)/(to-from+1)*100) + '%';
     if((n-from) % 4 === 0) await new Promise(r=>setTimeout(r,0));
   }
 
   const drop = repeatKeys(pages);
+  figuren = {};
+  pages.forEach(p => { if(p.figuren) figuren[p.n] = p.figuren; });
   wolkeLeeren();
   units = [];
   let para = 0;
@@ -962,6 +1021,7 @@ function render(){
       m.className = 'pagemark';
       m.innerHTML = '<span>Seite ' + u.page + '</span>';
       frag.appendChild(m);
+      if(figuren[u.page]) frag.appendChild(figurHinweis(u.page, figuren[u.page]));
     }
     if(u.para !== para){
       para = u.para;
@@ -981,6 +1041,39 @@ function render(){
   el.doc.innerHTML = '';
   el.doc.appendChild(frag);
   buildSpine();
+}
+
+function figurHinweis(nr, anzahl){
+  const d = document.createElement('div');
+  d.className = 'figur';
+  d.innerHTML = '<svg viewBox="0 0 24 24"><path d="M4 5h16a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1'
+    + ' 0 01-1-1V6a1 1 0 011-1zm1 11.5L9 12l3 3.5L15 12l4 4.5V7H5v9.5zM8.5 10a1.5 1.5 0 110-3'
+    + ' 1.5 1.5 0 010 3z"/></svg>'
+    + '<span>' + (anzahl === 1 ? 'Abbildung' : anzahl + ' Abbildungen')
+    + ' auf Seite ' + nr + ' · antippen zum Ansehen</span>';
+  d.onclick = () => figurZeigen(nr, d);
+  return d;
+}
+
+async function figurZeigen(nr, halter){
+  const vorhanden = halter.querySelector('canvas');
+  if(vorhanden){ vorhanden.remove(); return; }
+  if(!pdfDoc){ melde('Seite nicht verfügbar'); return; }
+  halter.style.opacity = '.5';
+  try{
+    const page = await pdfDoc.getPage(nr);
+    const roh = page.getViewport({scale:1});
+    const breite = Math.min(900, halter.clientWidth || 600);
+    const vp = page.getViewport({scale: breite / roh.width});
+    const c = document.createElement('canvas');
+    c.width = Math.round(vp.width);
+    c.height = Math.round(vp.height);
+    await page.render({canvasContext: c.getContext('2d'), viewport: vp}).promise;
+    halter.appendChild(c);
+  }catch(e){
+    melde('Seite konnte nicht dargestellt werden');
+  }
+  halter.style.opacity = '';
 }
 
 function buildSpine(){
@@ -1591,6 +1684,21 @@ el.bExpand.onclick = () => {
   units.forEach(u => u.speak = spoken(u.text));
   if(mode === 'playing') play(idx);
 };
+$('bFiguren').onclick = () => {
+  zeigeFiguren = !zeigeFiguren;
+  $('bFiguren').setAttribute('aria-pressed', String(zeigeFiguren));
+  try{ localStorage.setItem('vorleser.figuren', zeigeFiguren ? '1' : '0'); }catch(e){}
+  melde(zeigeFiguren
+    ? 'Abbildungen werden gesucht — Einlesen dauert länger'
+    : 'Abbildungen aus — Einlesen wieder schnell');
+  if(pdfDoc) build();
+};
+try{
+  if(localStorage.getItem('vorleser.figuren') === '1'){
+    zeigeFiguren = true;
+    $('bFiguren').setAttribute('aria-pressed', 'true');
+  }
+}catch(e){}
 el.cols.onchange = build;
 el.pFrom.onchange = el.pTo.onchange = build;
 
