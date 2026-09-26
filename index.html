@@ -589,6 +589,7 @@
 <div class="toast" id="toast"></div>
 
 <input type="file" id="file" accept="application/pdf,.pdf" hidden>
+<input type="file" id="fileMulti" accept="application/pdf,.pdf" multiple hidden>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
@@ -608,7 +609,7 @@ const el = {
   pitch:$('pitch'), bMark:$('bMark'), bSheet:$('bSheet'), sheet:$('sheet'),
   sheetList:$('sheetList'), bSheetZu:$('bSheetZu'), bExport:$('bExport'),
   markCount:$('markCount'), toast:$('toast'),
-  bLib:$('bLib'), libCount:$('libCount'),
+  bLib:$('bLib'), libCount:$('libCount'), fileMulti:$('fileMulti'),
   weiter:$('weiter'), weiterText:$('weiterText'),
   stoerung:$('stoerung'), stoerungText:$('stoerungText'),
   panel:$('panel'), bPanel:$('bPanel'), bExpand:$('bExpand'), bFollow:$('bFollow'),
@@ -1617,6 +1618,8 @@ function merken(){
 function zeigeSammlung(){
   $('sheetTitel').textContent = 'Gemerkte Sätze';
   el.bExport.hidden = false;
+  el.bExport.textContent = 'Sichern';
+  el.bExport.onclick = markenExport;
   el.sheetList.innerHTML = '';
   if(!marken.length){
     el.sheetList.innerHTML = '<p class="sheet__leer">Noch nichts gemerkt.<br>'
@@ -1987,7 +1990,9 @@ async function buchOeffnen(eintrag){
 
 async function zeigeBibliothek(){
   $('sheetTitel').textContent = 'Bibliothek';
-  el.bExport.hidden = true;
+  el.bExport.hidden = false;
+  el.bExport.textContent = 'Bücher hinzufügen';
+  el.bExport.onclick = () => el.fileMulti.click();
   el.sheetList.innerHTML = '<p class="sheet__leer">Wird geladen …</p>';
   el.sheet.hidden = false;
 
@@ -2001,7 +2006,8 @@ async function zeigeBibliothek(){
 
   if(!liste.length){
     el.sheetList.innerHTML = '<p class="sheet__leer">Noch keine Bücher abgelegt.<br>'
-      + 'Lade eine PDF — sie bleibt danach dauerhaft im Gerät, auch ohne Internet.</p>';
+      + 'Oben auf „Bücher hinzufügen" tippen — du kannst mehrere auf einmal auswählen. '
+      + 'Sie bleiben dauerhaft im Gerät, auch ohne Internet.</p>';
     el.sheetList.appendChild(info);
     return;
   }
@@ -2052,6 +2058,62 @@ async function zeigeBibliothek(){
   el.sheetList.appendChild(box);
   el.sheetList.appendChild(info);
 }
+
+async function buecherEinlesen(dateien){
+  if(!dateien || !dateien.length) return;
+  if(!window.pdfjsLib){ melde('PDF-Bibliothek nicht geladen'); return; }
+  const liste = Array.from(dateien).filter(f => /\.pdf$/i.test(f.name));
+  if(!liste.length){ melde('Keine PDF dabei'); return; }
+
+  el.sheet.hidden = true;
+  show('busy');
+  let fertig = 0, uebersprungen = 0, fehler = 0;
+
+  for(let i = 0; i < liste.length; i++){
+    const f = liste[i];
+    el.busyLine.textContent = (i + 1) + ' von ' + liste.length;
+    el.busyBar.style.width = Math.round(i / liste.length * 100) + '%';
+    await new Promise(r => setTimeout(r, 0));
+
+    try{
+      const vorhanden = await dbTun('readonly', s => s.get(buchId(f.name, f.size)));
+      const da = vorhanden && (vorhanden.result !== undefined ? vorhanden.result : vorhanden);
+      if(da && da.id){ uebersprungen++; continue; }
+    }catch(e){}
+
+    try{
+      const buf = await f.arrayBuffer();
+      const fuerPdf = buf.slice(0);
+      const doc = await pdfjsLib.getDocument({data: fuerPdf}).promise;
+      let titel = f.name.replace(/\.pdf$/i, '');
+      try{
+        const meta = await doc.getMetadata();
+        if(meta && meta.info && meta.info.Title && meta.info.Title.trim().length > 2)
+          titel = meta.info.Title.trim();
+      }catch(e){}
+      const seiten = doc.numPages;
+      doc.destroy();
+      await buchAblegen(f, buf, titel, seiten, 0);
+      fertig++;
+    }catch(e){ fehler++; }
+  }
+
+  el.busyBar.style.width = '100%';
+  show(units.length ? 'doc' : 'empty');
+  const teile = [];
+  if(fertig) teile.push(fertig + ' abgelegt');
+  if(uebersprungen) teile.push(uebersprungen + ' schon vorhanden');
+  if(fehler) teile.push(fehler + ' fehlgeschlagen');
+  melde(teile.join(' · ') || 'Nichts zu tun');
+  await libZaehlen();
+  zeigeBibliothek();
+}
+
+el.fileMulti.onchange = e => {
+  const d = e.target.files;
+  e.target.value = '';
+  buecherEinlesen(d);
+};
 
 el.bLib.onclick = zeigeBibliothek;
 dauerhaftSichern();
@@ -2115,7 +2177,7 @@ el.bSheet.onclick = zeigeSammlung;
 el.bSheetZu.onclick = () => { el.sheet.hidden = true; };
 el.sheet.onclick = e => { if(e.target === el.sheet) el.sheet.hidden = true; };
 
-el.bExport.onclick = () => {
+function markenExport(){
   if(!marken.length){ melde('Nichts zu sichern'); return; }
   let out = 'Gemerkte Sätze\n\n';
   const buecher = {};
@@ -2129,7 +2191,7 @@ el.bExport.onclick = () => {
   a.download = 'gemerkte-saetze.txt';
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-};
+}
 
 ladeMarken();
 
