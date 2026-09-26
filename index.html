@@ -475,6 +475,10 @@
         </select>
       </div>
       <div class="field">
+        <label>Nach 30 Minuten</label>
+        <button class="ghost" id="bSchlaf" aria-pressed="false">Schlafmodus</button>
+      </div>
+      <div class="field">
         <label>Aussprache</label>
         <button class="ghost" id="bExpand" aria-pressed="true">Abkürzungen ausschreiben</button>
       </div>
@@ -636,7 +640,7 @@
 (function(){
 "use strict";
 
-const APP_VERSION = 'v23';
+const APP_VERSION = 'v25';
 
 /* ══ Elemente ═══════════════════════════════════════════ */
 const $ = id => document.getElementById(id);
@@ -694,6 +698,11 @@ let uebersprungen = 0;            // Seite, an der begonnen wurde
 const GROSS = 150;           // ab so vielen Seiten abschnittsweise
 const BLOCK = 100;           // Seiten je Abschnitt
 let zeigeFiguren = false;    // Standard aus — hält das Einlesen schnell
+const SCHLAF_MIN = 30;       // feste halbe Stunde
+let schlafAn = false;        // Schlafmodus aktiv
+let schlafRest = 0;          // verbleibende Millisekunden
+let imWarten = false;        // wartet gerade auf ein Lebenszeichen
+let warteBis = 0;
 
 /* ══ Textwerkzeuge ══════════════════════════════════════ */
 const SP = '\u0001'; // Platzhalter für geschützte Punkte
@@ -1267,7 +1276,9 @@ function paint(){
   el.counters.innerHTML = 'Satz <b>' + (idx+1) + '/' + units.length + '</b><span class="dot">·</span>' +
     'Seite <b>' + (units[idx] ? units[idx].page : '—') + '</b><span class="dot">·</span>' +
     '<b>' + Math.round(idx / Math.max(1, units.length - 1) * 100) + ' %</b>' +
-    '<span class="dot">·</span>noch <b>~' + mins + ' min</b>';
+    '<span class="dot">·</span>noch <b>~' + mins + ' min</b>'
+    + (schlafAn ? '<span class="dot">·</span>Schlaf <b>'
+        + Math.max(0, Math.ceil(schlafRest / 60000)) + ' min</b>' : '');
 
   if(follow && !userScrolled && marke) scrollTo(marke);
   sperrbildschirm();
@@ -1487,12 +1498,15 @@ function chosenVoice(){ return slot[lang][aktiv] || slot[lang][0] || null; }
 
 function play(from){
   if(!units.length) return;
+  if(schlafWeiter() && mode === 'paused'){ resume(); return; }
   gen++;
   const my = gen;
   synth.cancel();
   if(typeof from === 'number') idx = from;
   try{ audio.pause(); }catch(e){}
   el.stoerung.hidden = true;
+  if(schlafAn && schlafRest <= 0) schlafRest = SCHLAF_MIN * 60000;
+  lautstaerkeZuruecksetzen();
   mode = 'playing';
   paint(); icons();
   if(wolkeAn()) wolkeSpiel(my);
@@ -1527,6 +1541,7 @@ function pause(){
   icons();
 }
 function resume(){
+  schlafWeiter();
   if(mode !== 'paused') return;
   mode = 'playing';
   icons();
@@ -1565,6 +1580,91 @@ setInterval(() => {
     try{ synth.pause(); synth.resume(); }catch(e){}
   }
 }, 8000);
+
+/* ══ Schlafmodus ═════════════════════════════════════════ */
+function schlafUmschalten(an){
+  schlafAn = an;
+  schlafRest = an ? SCHLAF_MIN * 60000 : 0;
+  imWarten = false;
+  lautstaerkeZuruecksetzen();
+  $('bSchlaf').setAttribute('aria-pressed', String(an));
+  try{ localStorage.setItem('vorleser.schlaf', an ? '1' : '0'); }catch(e){}
+  melde(an ? 'Schlafmodus an — Nachfrage nach 30 Minuten' : 'Schlafmodus aus');
+  if(units.length) paint();
+}
+
+function schlafAus(){
+  schlafAn = false;
+  schlafRest = 0;
+  imWarten = false;
+  $('bSchlaf').setAttribute('aria-pressed', 'false');
+  try{ localStorage.setItem('vorleser.schlaf', '0'); }catch(e){}
+  lautstaerkeZuruecksetzen();
+}
+
+function lautstaerkeZuruecksetzen(){
+  try{ audio.volume = 1; }catch(e){}
+}
+
+/* Die letzten fünfzehn Sekunden leiser werden lassen */
+function schlafBlenden(){
+  if(!wolkeAn()) return;
+  const rest = schlafRest;
+  try{
+    audio.volume = rest > 15000 ? 1 : Math.max(0.12, rest / 15000);
+  }catch(e){}
+}
+
+function schlafNachfrage(){
+  imWarten = true;
+  warteBis = Date.now() + 25000;
+  if(wolkeAn()){ try{ audio.pause(); }catch(e){} }
+  else { try{ synth.pause(); }catch(e){} }
+  // Immer die Systemstimme — die kostet nichts und läuft offline
+  try{
+    const u = new SpeechSynthesisUtterance(lang === 'de'
+      ? 'Noch da? Zum Weiterhören kurz antippen.'
+      : 'Still there? Tap once to keep going.');
+    const v = slot[lang][0];
+    if(v){ u.voice = v; u.lang = v.lang; }
+    u.volume = 0.9;
+    synth.speak(u);
+  }catch(e){}
+  melde('Noch da? Antippen zum Weiterhören');
+}
+
+function schlafWeiter(){
+  if(!imWarten) return false;
+  imWarten = false;
+  schlafRest = SCHLAF_MIN * 60000;
+  lautstaerkeZuruecksetzen();
+  melde('Weiter — noch ' + SCHLAF_MIN + ' Minuten');
+  return true;
+}
+
+setInterval(() => {
+  if(imWarten){
+    if(Date.now() > warteBis){
+      schlafAus();
+      stop();
+      melde('Schlafmodus — angehalten');
+    }
+    return;
+  }
+  if(!schlafAn || mode !== 'playing') return;
+  schlafRest -= 1000;
+  schlafBlenden();
+  if(schlafRest <= 0) schlafNachfrage();
+}, 1000);
+
+$('bSchlaf').onclick = () => schlafUmschalten(!schlafAn);
+try{
+  if(localStorage.getItem('vorleser.schlaf') === '1'){
+    schlafAn = true;
+    schlafRest = SCHLAF_MIN * 60000;
+    $('bSchlaf').setAttribute('aria-pressed', 'true');
+  }
+}catch(e){}
 
 /* ══ Stimmen ════════════════════════════════════════════ */
 const LOCALE = { de: 'de-de', en: 'en-us' };
