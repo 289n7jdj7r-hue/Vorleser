@@ -1,0 +1,5 @@
+pymupdf>=1.24
+edge-tts>=7.0
+# optional, nur für eingescannte PDFs:
+# pytesseract>=0.3.10
+# pillow>=10.0
