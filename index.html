@@ -517,7 +517,8 @@
       <div class="field">
         <label>Datei</label>
         <span style="display:flex;gap:8px">
-          <button class="ghost" id="bNew">Andere PDF</button>
+          <button class="ghost" id="bNew">PDF laden</button>
+          <button class="ghost" id="bViele">Mehrere hinzufügen</button>
           <button class="ghost" id="bTxt">Text sichern</button>
         </span>
       </div>
@@ -558,7 +559,7 @@
         <p class="eyebrow">PDF hierher ziehen</p>
         <h1>Lass dir vorlesen,<br>was du sonst lesen müsstest.</h1>
         <p>Text wird direkt im Browser aus der PDF gelöst. Geladene Bücher bleiben dauerhaft im Gerät — auch ohne Internet.</p>
-        <button class="cta" id="bPick">Datei wählen</button>
+        <button class="cta" id="bPick">Dateien wählen</button>
         <p class="sub" id="voiceNote">Stimmen werden geladen …</p>
         <p class="sub" id="installTipp" hidden style="margin-top:10px;color:#7C8CA0">
           Teilen → Zum Home-Bildschirm
@@ -599,7 +600,7 @@
 </div>
 <div class="toast" id="toast"></div>
 
-<input type="file" id="file" accept="application/pdf,.pdf" hidden>
+<input type="file" id="file" accept="application/pdf,.pdf" multiple hidden>
 <input type="file" id="fileMulti" accept="application/pdf,.pdf" multiple hidden>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -607,7 +608,7 @@
 (function(){
 "use strict";
 
-const APP_VERSION = 'v16';
+const APP_VERSION = 'v17';
 
 /* ══ Elemente ═══════════════════════════════════════════ */
 const $ = id => document.getElementById(id);
@@ -1483,9 +1484,15 @@ async function load(file, ausAblage){
 /* ══ Bedienung ══════════════════════════════════════════ */
 el.bPick.onclick = el.bRetry.onclick = el.bNew.onclick = () => el.file.click();
 el.file.onchange = e => {
-  const f = (e.target.files || [])[0];
+  const d = Array.from(e.target.files || []);   // erst kopieren, dann leeren
   e.target.value = '';
-  if(f) load(f);
+  if(!d.length){ melde('Keine Datei angekommen'); return; }
+  if(d.length === 1){ load(d[0]); return; }
+  melde(d.length + ' Dateien angekommen');
+  buecherEinlesen(d).catch(err => {
+    show(units.length ? 'doc' : 'empty');
+    stoerung('Import: ' + (err && err.message ? err.message : err));
+  });
 };
 
 ['dragenter','dragover'].forEach(t => el.stage.addEventListener(t, e => {
@@ -2027,7 +2034,10 @@ async function zeigeBibliothek(){
   $('sheetTitel').textContent = 'Bibliothek';
   el.bExport.hidden = false;
   el.bExport.textContent = 'Bücher hinzufügen';
-  el.bExport.onclick = () => el.fileMulti.click();
+  el.bExport.onclick = () => {
+    el.sheet.hidden = true;                    // Überlagerung weg, sonst blockt iOS
+    setTimeout(() => el.file.click(), 60);
+  };
   el.sheetList.innerHTML = '<p class="sheet__leer">Wird geladen …</p>';
   el.sheet.hidden = false;
 
@@ -2146,17 +2156,14 @@ async function buecherEinlesen(dateien){
   zeigeBibliothek();
 }
 
+// Zweites Feld bleibt als Rückfallebene erhalten
 el.fileMulti.onchange = e => {
-  // Erst kopieren, dann leeren — sonst ist die Liste unter Safari weg
   const d = Array.from(e.target.files || []);
   e.target.value = '';
-  melde(d.length + ' Dateien angekommen');
-  buecherEinlesen(d).catch(err => {
-    show(units.length ? 'doc' : 'empty');
-    stoerung('Import: ' + (err && err.message ? err.message : err));
-  });
+  if(d.length) buecherEinlesen(d).catch(() => {});
 };
 
+$('bViele').onclick = () => el.file.click();
 el.bLib.onclick = zeigeBibliothek;
 dauerhaftSichern();
 libZaehlen();
