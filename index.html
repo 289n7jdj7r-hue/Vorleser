@@ -182,6 +182,13 @@
   }
   .stoerung span{flex:1}
   .stoerung b{display:block;margin-bottom:3px;font-size:14.5px}
+  .minibar{display:none}
+  .minibar__info{
+    flex:1;text-align:right;font-family:var(--font-mono);font-size:10px;
+    letter-spacing:.07em;color:#868D9C;line-height:1.5;
+  }
+  .minibar__info b{color:var(--paper);font-variant-numeric:tabular-nums}
+
   .toast{
     position:fixed;left:50%;bottom:calc(28px + env(safe-area-inset-bottom));
     transform:translateX(-50%) translateY(14px);
@@ -356,18 +363,45 @@
     }
     .card{margin:0 auto}
     .weiter,.stoerung{position:sticky;top:0}
-    .card h1{font-size:1.55rem;line-height:1.25}
-    .card p{font-size:13.5px;margin-bottom:20px}
-    .card .sub{font-size:9px;letter-spacing:.09em}
-    .eyebrow{font-size:9px;margin-bottom:12px}
 
-    .weiter,.stoerung{padding:11px 14px;font-size:13.5px;gap:10px}
-    .stoerung{flex-wrap:wrap}
-    .sheet__box{max-height:92dvh}
-    .sheet__top{padding:15px 16px;gap:10px}
-    .sheet__list{padding:8px 16px 26px}
-    .doc{padding:26px 16px 55vh}
-    .doc p{font-size:1.02rem;line-height:1.72}
+    /* ── Oben: schmale Leiste, immer sichtbar, klappt bei Bedarf auf ── */
+    .console{
+      position:fixed;top:0;left:0;right:0;z-index:30;
+      max-height:88dvh;overflow-y:auto;-webkit-overflow-scrolling:touch;
+      padding-top:env(safe-area-inset-top);
+      box-shadow:0 4px 18px rgba(0,0,0,.45);
+    }
+    .console .transport{display:none}               /* wandert nach unten */
+    .console:not(.offen) .field{display:none}        /* Chips nur bei Einstellungen */
+    .console:not(.offen) #bSheet{display:none}
+    .console:not(.offen) #libCount{display:none}
+    .console__row{padding:7px 12px;gap:8px;flex-wrap:nowrap;align-items:center}
+    .console.offen .console__row{flex-wrap:wrap}
+    .readout{order:0;flex:1 1 auto;min-width:0;width:auto;font-size:9.5px;line-height:1.45}
+    .readout__title{font-size:8.5px;max-width:100%}
+    .readout .dot{padding:0 3px}
+    .console.offen .readout{order:9;width:100%;flex-basis:100%}
+    .ghost{padding:7px 9px;font-size:8.5px;letter-spacing:.09em}
+    .stage{padding-top:calc(var(--kopf, 58px) + env(safe-area-inset-top))}
+    .weiter,.stoerung,#abschnitt{
+      position:sticky;top:calc(var(--kopf, 58px) + env(safe-area-inset-top));z-index:6;
+    }
+
+    /* ── Unten rechts: der Play-Knopf, wie bei alten Musik-Apps ── */
+    .minibar{
+      display:flex;position:fixed;left:auto;right:12px;
+      bottom:calc(12px + env(safe-area-inset-bottom));z-index:35;
+      align-items:center;gap:6px;padding:6px 6px 6px 10px;
+      background:rgba(23,26,32,.94);border:1px solid var(--line);border-radius:999px;
+      box-shadow:0 10px 28px rgba(0,0,0,.45);
+    }
+    .minibar .tbtn{width:36px;height:36px;background:transparent;border-color:transparent}
+    .minibar .tbtn svg{width:15px;height:15px}
+    .minibar .tbtn--main{width:58px;height:58px;background:var(--marker);border-color:var(--marker)}
+    .minibar .tbtn--main svg{width:24px;height:24px}
+    .minibar__info{display:none}
+    .doc{padding-bottom:calc(40vh + 100px)}
+    .center{padding-bottom:calc(120px + env(safe-area-inset-bottom))}
   }
 
   @media (prefers-reduced-motion:reduce){
@@ -536,6 +570,7 @@
         <span style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="ghost" id="bVoices">Stimmen im System</button>
           <button class="ghost" id="bFrisch">App neu laden</button>
+          <button class="ghost" id="bTxt" title="Exportiert den ganzen Buchtext als Datei">Buchtext exportieren</button>
         </span>
       </div>
       <div class="field">
@@ -543,7 +578,6 @@
         <span style="display:flex;gap:8px">
           <button class="ghost" id="bNew">PDF laden</button>
           <button class="ghost" id="bViele">Mehrere hinzufügen</button>
-          <button class="ghost" id="bTxt">Text sichern</button>
         </span>
       </div>
       <span class="spacer"></span>
@@ -620,6 +654,23 @@
   </main>
 </div>
 
+<div class="minibar" id="minibar" hidden>
+  <button class="tbtn" id="mPrev" aria-label="Satz zurück">
+    <svg viewBox="0 0 24 24"><path d="M18 5v14L8 12z"/><path d="M6 5h2.2v14H6z"/></svg>
+  </button>
+  <button class="tbtn tbtn--main" id="mPlay" aria-label="Vorlesen">
+    <svg id="mIcoPlay" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+    <svg id="mIcoPause" viewBox="0 0 24 24" hidden><path d="M7 5h3.4v14H7zM13.6 5H17v14h-3.4z"/></svg>
+  </button>
+  <button class="tbtn" id="mNext" aria-label="Satz vor">
+    <svg viewBox="0 0 24 24"><path d="M6 5l10 7-10 7z"/><path d="M15.8 5H18v14h-2.2z"/></svg>
+  </button>
+  <button class="tbtn" id="mMark" aria-label="Satz merken">
+    <svg viewBox="0 0 24 24"><path d="M7 3h10a1 1 0 011 1v17l-6-4.2L6 21V4a1 1 0 011-1z"/></svg>
+  </button>
+  <span class="minibar__info" id="mInfo"></span>
+</div>
+
 <div class="sheet" id="sheet" hidden>
   <div class="sheet__box">
     <div class="sheet__top">
@@ -640,7 +691,7 @@
 (function(){
 "use strict";
 
-const APP_VERSION = 'v25';
+const APP_VERSION = 'v28';
 
 /* ══ Elemente ═══════════════════════════════════════════ */
 const $ = id => document.getElementById(id);
@@ -656,6 +707,7 @@ const el = {
   sheetList:$('sheetList'), bSheetZu:$('bSheetZu'), bExport:$('bExport'),
   markCount:$('markCount'), toast:$('toast'),
   bLib:$('bLib'), libCount:$('libCount'), fileMulti:$('fileMulti'),
+  minibar:$('minibar'), mInfo:$('mInfo'),
   weiter:$('weiter'), weiterText:$('weiterText'),
   abschnitt:$('abschnitt'), abschnittText:$('abschnittText'),
   stoerung:$('stoerung'), stoerungText:$('stoerungText'),
@@ -695,6 +747,7 @@ let figuren = {};            // Seite -> Anzahl Abbildungen
 let abbruch = false;         // Ladevorgang abbrechen
 let ueberspringeTitelei = true;   // Titelei automatisch überspringen
 let uebersprungen = 0;            // Seite, an der begonnen wurde
+let zielSeite = 0;                // nach dem Laden dorthin springen
 const GROSS = 150;           // ab so vielen Seiten abschnittsweise
 const BLOCK = 100;           // Seiten je Abschnitt
 let zeigeFiguren = false;    // Standard aus — hält das Einlesen schnell
@@ -837,9 +890,31 @@ function chunk(s, cap){
   return out;
 }
 
+/* Versalien werden von Sprachmodellen gern buchstabiert:
+   KHALID -> K-H-A-L-I-D. Deshalb in Normalschreibung wandeln.
+   Kurze Kürzel wie EU oder USA bleiben, die sollen buchstabiert werden. */
+const zuNormal = w => w.split('-')
+  .map(p => p ? p.charAt(0) + p.slice(1).toLowerCase() : p).join('-');
+
+function versalienLoesen(t){
+  // Mehrere Versalwörter hintereinander = Titel oder Name -> normalisieren
+  t = t.replace(/\b[A-ZÄÖÜ][A-ZÄÖÜß-]+(?:\s+[A-ZÄÖÜ][A-ZÄÖÜß-]+)+\b/g,
+    s => s.replace(/[A-ZÄÖÜ][A-ZÄÖÜß-]*/g, zuNormal));
+  // Einzelnes, sehr langes Versalwort -> ebenfalls. Kurze Kürzel
+  // wie DORA, KZVK oder IFRS bleiben, die sollen buchstabiert werden.
+  t = t.replace(/\b[A-ZÄÖÜ][A-ZÄÖÜß]{5,}\b/g, zuNormal);
+  return t;
+}
+
+/* Fußnotenziffern, die am Text kleben: "(SAWS)]1 Khalid" */
+function fussnotenLoesen(t){
+  return t.replace(/([\]\)])\s*\d{1,3}(?=\s|$)/g, '$1')
+          .replace(/([a-zäöüß"”\u2019])\d{1,2}(?=\s[A-ZÄÖÜ])/g, '$1');
+}
+
 function spoken(s){
-  if(!expand) return s;
-  let t = s;
+  let t = fussnotenLoesen(versalienLoesen(s));
+  if(!expand) return t;
   for(const [re,rep] of SAY()) t = t.replace(re,rep);
   return t.replace(/\s{2,}/g,' ').trim();
 }
@@ -1043,8 +1118,15 @@ async function build(){
   show('doc');
   enable(true);
   paint();
-  standAnbieten();
-  if(uebersprungen > 1 && el.weiter.hidden) titeleiHinweis();
+  if(zielSeite){
+    const z = units.findIndex(u => u.page >= zielSeite);
+    if(z >= 0){ idx = z; paint(); }
+    zielSeite = 0;
+    melde('Weiter auf Seite ' + (units[idx] ? units[idx].page : '?'));
+  } else {
+    standAnbieten();
+    if(uebersprungen > 1 && el.weiter.hidden) titeleiHinweis();
+  }
 }
 
 function wolkeLeeren(){
@@ -1280,6 +1362,9 @@ function paint(){
     + (schlafAn ? '<span class="dot">·</span>Schlaf <b>'
         + Math.max(0, Math.ceil(schlafRest / 60000)) + ' min</b>' : '');
 
+  el.mInfo.innerHTML = 'Seite <b>' + (units[idx] ? units[idx].page : '—') + '</b>'
+    + '  ·  <b>' + Math.round(idx / Math.max(1, units.length - 1) * 100) + ' %</b>'
+    + (schlafAn ? '  ·  Schlaf <b>' + Math.max(0, Math.ceil(schlafRest/60000)) + '</b>' : '');
   if(follow && !userScrolled && marke) scrollTo(marke);
   sperrbildschirm();
   standSichern(false);
@@ -1328,6 +1413,18 @@ const wolke = { dienst:'', key:'', region:'westeurope', stimme:'',
                 cache:new Map(), laeuft:new Set() };
 const audio = new Audio();
 audio.preload = 'auto';
+let selbstPausiert = false;   // unterscheidet eigene Pause von der des Systems
+
+/* Ein Anruf, ein Wecker oder eine andere App halten das Audio an.
+   Dann steht die App sonst weiter auf "spielt". */
+audio.addEventListener('pause', () => {
+  if(selbstPausiert || audio.ended) return;
+  if(mode !== 'playing') return;
+  mode = 'paused';
+  icons();
+  standSichern(true);
+  melde('Unterbrochen — zum Weiterhören antippen');
+});
 
 const xmlEsc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 const locale = () => lang === 'de' ? 'de-DE' : 'en-US';
@@ -1471,6 +1568,12 @@ function stoerung(roh){
 $('bStoerungZu').onclick = () => { el.stoerung.hidden = true; };
 $('bAbbruch').onclick = () => { abbruch = true; };
 
+/* Die untere Leiste spiegelt die obere */
+$('mPlay').onclick = () => el.bPlay.click();
+$('mPrev').onclick = () => el.bPrev.click();
+$('mNext').onclick = () => el.bNext.click();
+$('mMark').onclick = () => el.bMark.click();
+
 async function wolkeSpiel(my){
   if(my !== gen) return;
   if(idx >= units.length){ stop(); return; }
@@ -1503,7 +1606,9 @@ function play(from){
   const my = gen;
   synth.cancel();
   if(typeof from === 'number') idx = from;
+  selbstPausiert = true;
   try{ audio.pause(); }catch(e){}
+  setTimeout(() => { selbstPausiert = false; }, 250);
   el.stoerung.hidden = true;
   if(schlafAn && schlafRest <= 0) schlafRest = SCHLAF_MIN * 60000;
   lautstaerkeZuruecksetzen();
@@ -1536,8 +1641,11 @@ function pause(){
   if(mode !== 'playing') return;
   mode = 'paused';
   standSichern(true);
+  selbstPausiert = true;
+  selbstPausiert = true;
   if(wolkeAn()){ try{ audio.pause(); }catch(e){} }
   else { try{ synth.pause(); }catch(e){} }
+  setTimeout(() => { selbstPausiert = false; }, 250);
   icons();
 }
 function resume(){
@@ -1553,8 +1661,10 @@ function stop(){
   gen++;
   mode = 'idle';
   standSichern(true);
+  selbstPausiert = true;
   try{ synth.cancel(); }catch(e){}
   try{ audio.pause(); }catch(e){}
+  setTimeout(() => { selbstPausiert = false; }, 250);
   icons();
   const cur = el.doc.querySelector('.sent.now');
   if(cur) cur.querySelectorAll('.w.on').forEach(w=>w.classList.remove('on'));
@@ -1570,6 +1680,8 @@ function icons(){
   const on = mode === 'playing';
   el.icoPlay.hidden = on;
   el.icoPause.hidden = !on;
+  $('mIcoPlay').hidden = on;
+  $('mIcoPause').hidden = !on;
   el.bPlay.title = on ? 'Anhalten (Leertaste)' : 'Vorlesen (Leertaste)';
   el.bPlay.setAttribute('aria-label', el.bPlay.title);
 }
@@ -1618,8 +1730,10 @@ function schlafBlenden(){
 function schlafNachfrage(){
   imWarten = true;
   warteBis = Date.now() + 25000;
+  selbstPausiert = true;
   if(wolkeAn()){ try{ audio.pause(); }catch(e){} }
   else { try{ synth.pause(); }catch(e){} }
+  setTimeout(() => { selbstPausiert = false; }, 250);
   // Immer die Systemstimme — die kostet nichts und läuft offline
   try{
     const u = new SpeechSynthesisUtterance(lang === 'de'
@@ -1782,6 +1896,8 @@ function show(what){
 }
 function enable(on){
   [el.bPlay, el.bPrev, el.bNext, el.bStop, el.bMark].forEach(b => b.disabled = !on);
+  ['mPlay','mPrev','mNext','mMark'].forEach(id => { $(id).disabled = !on; });
+  el.minibar.hidden = !on;
 }
 
 async function load(file, ausAblage){
@@ -1807,6 +1923,7 @@ async function load(file, ausAblage){
       title = titelSaeubern(meta && meta.info ? meta.info.Title : '', file.name);
     }catch(e){}
     el.docTitle.textContent = title + ' · ' + pdfDoc.numPages + ' Seiten';
+    setTimeout(kopfMessen, 50);
     el.pFrom.max = el.pTo.max = pdfDoc.numPages;
     el.pFrom.value = 1;
     el.pTo.value = pdfDoc.numPages > GROSS ? BLOCK : pdfDoc.numPages;
@@ -1925,11 +2042,25 @@ document.querySelectorAll('[data-tempo]').forEach(b => {
 
 el.pitch.onchange = () => { if(mode === 'playing') play(idx); };
 
+const konsole = document.querySelector('.console');
+
+function kopfMessen(){
+  if(konsole.classList.contains('offen')) return;   // nur die schmale Höhe zählt
+  const hoehe = konsole.getBoundingClientRect().height
+              - (parseFloat(getComputedStyle(konsole).paddingTop) || 0);
+  document.documentElement.style.setProperty('--kopf', Math.max(44, Math.round(hoehe)) + 'px');
+}
+
 el.bPanel.onclick = () => {
   const open = el.panel.hidden;
   el.panel.hidden = !open;
   el.bPanel.setAttribute('aria-pressed', String(open));
+  konsole.classList.toggle('offen', open);
+  if(!open) kopfMessen();
 };
+window.addEventListener('resize', kopfMessen);
+window.addEventListener('load', () => setTimeout(kopfMessen, 50));
+setTimeout(kopfMessen, 300);
 el.bFollow.onclick = () => {
   follow = !follow;
   userScrolled = false;
@@ -2013,6 +2144,8 @@ function merken(){
     buch: buchTitel(),
     seite: u.page,
     satz: u.text.trim(),
+    idx: idx,
+    von: parseInt(el.pFrom.value, 10) || 1,
     wann: new Date().toISOString()
   });
   const ok = sichereMarken();
@@ -2050,6 +2183,22 @@ function zeigeSammlung(){
       f.className = 'mark__foot';
       const s = document.createElement('span');
       s.textContent = 'Seite ' + m.seite;
+      if(m.buch === buchTitel() && typeof m.idx === 'number'){
+        const g = document.createElement('button');
+        g.textContent = 'Hingehen';
+        g.onclick = () => {
+          el.sheet.hidden = true;
+          if(m.von && m.von !== (parseInt(el.pFrom.value,10) || 1) && pdfDoc){
+            zielSeite = m.seite;
+            el.pFrom.value = m.von;
+            el.pTo.value = Math.min(pdfDoc.numPages, m.von + BLOCK - 1);
+            build();
+            return;
+          }
+          jump(Math.min(m.idx, units.length - 1), false);
+        };
+        f.appendChild(g);
+      }
       const k = document.createElement('button');
       k.textContent = 'Kopieren';
       k.onclick = () => {
@@ -2589,7 +2738,8 @@ libZaehlen();
 const STAND = 'vorleser.stand';
 let standZaehler = 0;
 
-function standKey(){ return buchTitel() + '|' + units.length; }
+// Schlüssel hängt am Buch, nicht am geladenen Abschnitt
+function standKey(){ return buchTitel() + '|' + (pdfDoc ? pdfDoc.numPages : units.length); }
 
 function standAlle(){
   try{ return JSON.parse(localStorage.getItem(STAND) || '{}'); }
@@ -2598,11 +2748,13 @@ function standAlle(){
 
 function standSichern(sofort){
   if(!units.length) return;
-  if(!sofort && ++standZaehler % 4 !== 0) return;
+  if(!sofort && ++standZaehler % 2 !== 0) return;
   try{
     const alle = standAlle();
     alle[standKey()] = { idx:idx, gesamt:units.length, titel:buchTitel(),
                          seite:units[idx] ? units[idx].page : 1,
+                         von:parseInt(el.pFrom.value,10) || 1,
+                         bis:parseInt(el.pTo.value,10) || 1,
                          wann:new Date().toISOString() };
     const schluessel = Object.keys(alle);
     if(schluessel.length > 20){
@@ -2616,7 +2768,9 @@ function standSichern(sofort){
 function standAnbieten(){
   el.weiter.hidden = true;
   const s = standAlle()[standKey()];
-  if(!s || s.idx < 3 || s.idx >= units.length - 1) return;
+  if(!s || s.idx < 3) return;
+  const gleicherAbschnitt = !s.von || s.von === (parseInt(el.pFrom.value,10) || 1);
+  if(gleicherAbschnitt && s.idx >= units.length - 1) return;
   const pct = Math.round(s.idx / units.length * 100);
   const wann = new Date(s.wann);
   const datum = isNaN(wann) ? '' : ' · zuletzt ' + wann.toLocaleDateString('de-DE',
@@ -2628,11 +2782,25 @@ function standAnbieten(){
   $('bVonVorn').textContent = 'Von vorn';
   el.weiter.hidden = false;
   el.weiter.dataset.idx = s.idx;
+  el.weiter.dataset.von = s.von || '';
+  el.weiter.dataset.bis = s.bis || '';
+  el.weiter.dataset.seite = s.seite || '';
 }
 
 $('bWeiter').onclick = () => {
   el.weiter.hidden = true;
-  jump(parseInt(el.weiter.dataset.idx, 10) || 0, false);
+  const zielIdx = parseInt(el.weiter.dataset.idx, 10) || 0;
+  const zielVon = parseInt(el.weiter.dataset.von || '0', 10);
+  const jetztVon = parseInt(el.pFrom.value, 10) || 1;
+  if(zielVon && zielVon !== jetztVon && pdfDoc){
+    // Der Abschnitt von damals ist nicht geladen — nachladen und dann springen
+    zielSeite = parseInt(el.weiter.dataset.seite || '0', 10) || 0;
+    el.pFrom.value = zielVon;
+    el.pTo.value = parseInt(el.weiter.dataset.bis || '0', 10) || Math.min(pdfDoc.numPages, zielVon + BLOCK - 1);
+    build();
+    return;
+  }
+  jump(zielIdx, false);
 };
 $('bVonVorn').onclick = () => {
   el.weiter.hidden = true;
@@ -2677,7 +2845,16 @@ el.bTxt.onclick = () => {
   setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
 };
 
-el.scroller.addEventListener('scroll', () => { if(!scrollLock) userScrolled = true; }, {passive:true});
+let scrollUhr = null;
+function handScroll(){
+  if(scrollLock) return;
+  userScrolled = true;
+  clearTimeout(scrollUhr);
+  // Nach kurzer Ruhe läuft der Text wieder von selbst mit
+  scrollUhr = setTimeout(() => { userScrolled = false; }, 12000);
+}
+el.scroller.addEventListener('scroll', handScroll, {passive:true});
+window.addEventListener('scroll', handScroll, {passive:true});
 el.scroller.addEventListener('click', e => { if(e.target === el.scroller || e.target === el.doc) userScrolled = false; });
 
 el.spine.addEventListener('click', e => {
@@ -2698,6 +2875,8 @@ document.addEventListener('keydown', e => {
 });
 
 window.addEventListener('beforeunload', () => { try{ synth.cancel(); }catch(e){} });
+['pagehide','blur'].forEach(ev => window.addEventListener(ev, () => standSichern(true)));
+document.addEventListener('visibilitychange', () => { if(document.hidden) standSichern(true); });
 
 /* ══ Als App auf dem Home-Bildschirm ═════════════════════ */
 if('serviceWorker' in navigator && location.protocol === 'https:'){
