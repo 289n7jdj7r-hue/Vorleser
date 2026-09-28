@@ -182,6 +182,7 @@
   }
   .stoerung span{flex:1}
   .stoerung b{display:block;margin-bottom:3px;font-size:14.5px}
+  .umbruch{display:none}
   .minibar{display:none}
   .minibar__info{
     flex:1;text-align:right;font-family:var(--font-mono);font-size:10px;
@@ -374,13 +375,15 @@
     .console .transport{display:none}               /* wandert nach unten */
     .console:not(.offen) .field{display:none}        /* Chips nur bei Einstellungen */
     .console:not(.offen) #bSheet{display:none}
-    .console:not(.offen) #libCount{display:none}
-    .console__row{padding:7px 12px;gap:8px;flex-wrap:nowrap;align-items:center}
-    .console.offen .console__row{flex-wrap:wrap}
-    .readout{order:0;flex:1 1 auto;min-width:0;width:auto;font-size:9.5px;line-height:1.45}
+    .console__row{padding:7px 12px;gap:8px;flex-wrap:wrap;align-items:center}
+    .readout{order:0;flex:1 1 0;min-width:0;width:auto;font-size:9.5px;line-height:1.45;
+             white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .readout__title{font-size:8.5px;max-width:100%}
     .readout .dot{padding:0 3px}
-    .console.offen .readout{order:9;width:100%;flex-basis:100%}
+    #bLib,#bPanel{order:0;flex:0 0 auto}
+    /* Aufgeklapptes landet immer unterhalb — die erste Zeile bleibt, wie sie ist */
+    .console.offen .umbruch{display:block;flex-basis:100%;height:0;order:4}
+    .console.offen .field,.console.offen #bSheet{order:5}
     .ghost{padding:7px 9px;font-size:8.5px;letter-spacing:.09em}
     .stage{padding-top:calc(var(--kopf, 58px) + env(safe-area-inset-top))}
     .weiter,.stoerung,#abschnitt{
@@ -446,6 +449,7 @@
 
       <span class="spacer"></span>
 
+      <i class="umbruch" aria-hidden="true"></i>
       <div class="field">
         <label>Sprache</label>
         <div class="chips">
@@ -691,7 +695,7 @@
 (function(){
 "use strict";
 
-const APP_VERSION = 'v28';
+const APP_VERSION = 'v29';
 
 /* ══ Elemente ═══════════════════════════════════════════ */
 const $ = id => document.getElementById(id);
