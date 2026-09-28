@@ -345,7 +345,7 @@
       position:sticky;top:0;max-height:none;overflow:visible;
       box-shadow:0 6px 18px rgba(0,0,0,.35);
     }
-    .panel{max-height:58dvh;overflow-y:auto;-webkit-overflow-scrolling:touch}
+    .panel{max-height:none;overflow:visible}
 
     .stage{display:block;min-height:55dvh;position:relative}
     .spine{display:none}
@@ -368,22 +368,29 @@
     /* ── Oben: schmale Leiste, immer sichtbar, klappt bei Bedarf auf ── */
     .console{
       position:fixed;top:0;left:0;right:0;z-index:30;
-      max-height:88dvh;overflow-y:auto;-webkit-overflow-scrolling:touch;
+      display:flex;flex-direction:column;
+      max-height:88dvh;overflow:hidden;          /* die Zeile selbst scrollt nie */
       padding-top:env(safe-area-inset-top);
       box-shadow:0 4px 18px rgba(0,0,0,.45);
     }
+    .console__row{flex:0 0 auto}
+    #klapp{
+      display:none;flex:1 1 auto;min-height:0;
+      overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;
+      flex-wrap:wrap;gap:12px;align-content:flex-start;
+      padding:8px 12px 14px;border-top:1px solid var(--line);
+    }
+    .console.offen #klapp{display:flex}
+    #klapp .field{display:flex}
+    #klapp .panel{flex-basis:100%;border-top:1px solid var(--line);margin-top:4px}
     .console .transport{display:none}               /* wandert nach unten */
-    .console:not(.offen) .field{display:none}        /* Chips nur bei Einstellungen */
-    .console:not(.offen) #bSheet{display:none}
     .console__row{padding:7px 12px;gap:8px;flex-wrap:wrap;align-items:center}
     .readout{order:0;flex:1 1 0;min-width:0;width:auto;font-size:9.5px;line-height:1.45;
              white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .readout__title{font-size:8.5px;max-width:100%}
     .readout .dot{padding:0 3px}
     #bLib,#bPanel{order:0;flex:0 0 auto}
-    /* Aufgeklapptes landet immer unterhalb — die erste Zeile bleibt, wie sie ist */
-    .console.offen .umbruch{display:block;flex-basis:100%;height:0;order:4}
-    .console.offen .field,.console.offen #bSheet{order:5}
+
     .ghost{padding:7px 9px;font-size:8.5px;letter-spacing:.09em}
     .stage{padding-top:calc(var(--kopf, 58px) + env(safe-area-inset-top))}
     .weiter,.stoerung,#abschnitt{
@@ -695,7 +702,7 @@
 (function(){
 "use strict";
 
-const APP_VERSION = 'v29';
+const APP_VERSION = 'v30';
 
 /* ══ Elemente ═══════════════════════════════════════════ */
 const $ = id => document.getElementById(id);
@@ -2047,6 +2054,23 @@ document.querySelectorAll('[data-tempo]').forEach(b => {
 el.pitch.onchange = () => { if(mode === 'playing') play(idx); };
 
 const konsole = document.querySelector('.console');
+
+/* Auf dem Handy wird die Kopfzeile vom Aufklappbaren getrennt:
+   Die Zeile mit Titel, Bibliothek und Einstellungen bleibt ein eigenes,
+   unbewegliches Element. Alles andere wandert in einen Bereich darunter,
+   der für sich scrollt. So kann der Einstellungen-Knopf nie verrutschen. */
+const handy = window.matchMedia('(max-width:640px)').matches;
+if(handy){
+  const zeile = konsole.querySelector('.console__row');
+  const klapp = document.createElement('div');
+  klapp.id = 'klapp';
+  Array.from(zeile.children).forEach(k => {
+    if(k.classList.contains('field') || k.id === 'bSheet' || k.classList.contains('umbruch'))
+      klapp.appendChild(k);
+  });
+  klapp.appendChild(el.panel);
+  konsole.appendChild(klapp);
+}
 
 function kopfMessen(){
   if(konsole.classList.contains('offen')) return;   // nur die schmale Höhe zählt
