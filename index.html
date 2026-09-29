@@ -602,7 +602,7 @@
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:6px">
           <div class="field">
             <label for="uKey">Google-Schlüssel</label>
-            <input type="password" id="uKey" placeholder="derselbe wie für Chirp" style="width:210px;
+            <input type="password" id="uKey" placeholder="nur nötig, wenn Chirp nicht verbunden ist" style="width:210px;
               font-family:var(--font-ui);font-size:13px;color:var(--paper);
               background:var(--console-2);border:1px solid var(--line);border-radius:7px;padding:7px 9px">
           </div>
@@ -746,7 +746,7 @@
 (function(){
 "use strict";
 
-const APP_VERSION = 'v35';
+const APP_VERSION = 'v37';
 
 /* ══ Elemente ═══════════════════════════════════════════ */
 const $ = id => document.getElementById(id);
@@ -2658,6 +2658,7 @@ async function verbinden(still){
     wolkeBearbeiten = false;
     wolkeSichern();
     oberflaeche();
+    try{ uebStatus(); }catch(e){}
     if(!still) melde('Verbunden');
   }catch(e){
     wolke.stimmen = [];
@@ -3010,6 +3011,8 @@ const U_SPEICHER = 'vorleser.uebersetzen', VOK_SPEICHER = 'vorleser.vokabeln';
 let uKeyWert = '', gKeyWert = '', japanisch = false, vokabeln = [];
 
 function uebKey(){
+  // Der Schlüssel, mit dem Chirp nachweislich verbunden ist, geht vor
+  if(wolke.dienst === 'google' && wolke.key && wolkeAn()) return wolke.key;
   if(uKeyWert) return uKeyWert;
   if(wolke.dienst === 'google' && wolke.key) return wolke.key;
   return '';
@@ -3036,8 +3039,9 @@ function vokSichern(){
 }
 function vokZaehlen(){ $('vokCount').textContent = vokabeln.length ? '· ' + vokabeln.length : ''; }
 function uebStatus(){
+  const quelle = (wolke.dienst === 'google' && wolke.key && wolkeAn()) ? ' (Schlüssel von Chirp)' : '';
   $('uStatus').textContent = uebKey()
-    ? ('Übersetzung bereit' + (gKeyWert ? ' · Erklärungen bereit' : ' · ohne Gemini-Schlüssel nur Übersetzung und Aussprache'))
+    ? ('Übersetzung bereit' + quelle + (gKeyWert ? ' · Erklärungen bereit' : ' · ohne Gemini-Schlüssel nur Übersetzung und Aussprache'))
     : 'Ohne Schlüssel geht nur die Aussprache. Cloud Translation API im Google-Portal aktivieren.';
 }
 
@@ -3088,9 +3092,17 @@ async function uebersetzen(text, ziel){
     body: JSON.stringify({ q: text, target: ziel, format:'text' })
   });
   if(!r.ok){
-    if(r.status === 403 || r.status === 400)
-      throw new Error('Cloud Translation API nicht aktiviert oder im Schlüssel nicht freigegeben');
-    throw new Error('Übersetzung ' + r.status);
+    let grund = '';
+    try{
+      const j = await r.json();
+      grund = (j.error && (j.error.message || j.error.status)) || '';
+    }catch(e){}
+    let tipp = '';
+    if(/API key not valid|API_KEY_INVALID/i.test(grund)) tipp = 'Der Schlüssel selbst ist ungültig.';
+    else if(/SERVICE_BLOCKED|not authorized|blocked/i.test(grund)) tipp = 'Cloud Translation API ist im Schlüssel nicht freigegeben — in den API-Einschränkungen ankreuzen und Speichern.';
+    else if(/not been used|is disabled|SERVICE_DISABLED/i.test(grund)) tipp = 'Cloud Translation API ist im Projekt nicht aktiviert.';
+    else if(/billing/i.test(grund)) tipp = 'Für Cloud Translation muss die Abrechnung im Projekt aktiv sein.';
+    throw new Error((tipp ? tipp + ' ' : '') + 'Google ' + r.status + (grund ? ': ' + grund : ''));
   }
   const d = await r.json();
   verbrauchen('ueb', text.length);
@@ -3099,7 +3111,9 @@ async function uebersetzen(text, ziel){
 }
 
 /* Erklärung und Beispiele über ein Sprachmodell — fällt still aus, wenn nicht freigeschaltet */
+let geminiGrund = '';
 async function erklaeren(wort, kontext, quelle){
+  geminiGrund = '';
   const key = gKeyWert || '';
   if(!key) return null;
   const modelle = ['gemini-2.5-flash', 'gemini-2.0-flash'];
@@ -3117,7 +3131,11 @@ async function erklaeren(wort, kontext, quelle){
         body: JSON.stringify({ contents:[{parts:[{text:prompt}]}],
                                generationConfig:{temperature:0.3, maxOutputTokens:400} })
       });
-      if(!r.ok) continue;
+      if(!r.ok){
+        try{ const j = await r.json(); geminiGrund = (j.error && j.error.message) || ('HTTP ' + r.status); }
+        catch(e){ geminiGrund = 'HTTP ' + r.status; }
+        continue;
+      }
       const d = await r.json();
       const roh = (((d.candidates||[])[0]||{}).content||{}).parts;
       const txt = roh ? roh.map(p => p.text || '').join('') : '';
@@ -3241,7 +3259,7 @@ function wortKarte(t, gespeichert){
       } else {
         const hinweis = document.createElement('div'); hinweis.className = 'wort__warte';
         hinweis.textContent = gKeyWert
-          ? 'Erklärung nicht verfügbar — Gemini-Schlüssel prüfen.'
+          ? 'Erklärung nicht verfügbar. ' + (geminiGrund ? 'Gemini sagt: ' + geminiGrund : 'Gemini-Schlüssel prüfen.')
           : 'Für Erklärung und Beispiele unter Einstellungen einen Gemini-Schlüssel eintragen.';
         inhalt.appendChild(hinweis);
       }
