@@ -769,7 +769,7 @@
 (function(){
 "use strict";
 
-const APP_VERSION = 'v45';
+const APP_VERSION = 'v46';
 
 /* ══ Elemente ═══════════════════════════════════════════ */
 const $ = id => document.getElementById(id);
@@ -2813,6 +2813,23 @@ function dbTun(modus, arbeit, speicher){
     t.onerror = () => rej(t.error);
     t.onabort = () => rej(t.error || new Error('Abbruch — vermutlich kein Speicher mehr frei'));
   }));
+}
+
+/* Viele PDFs tragen Dateipfade oder Programmnamen als Titel.
+   Dann ist der Dateiname die bessere Wahl. */
+function titelSaeubern(roh, dateiname){
+  const ersatz = (dateiname || '').replace(/\.pdf$/i, '').replace(/[_]+/g, ' ').trim()
+                 || 'Ohne Titel';
+  if(!roh) return ersatz;
+  let t = String(roh).trim();
+  if(t.length < 3) return ersatz;
+  if(/^(file:|https?:|ftp:|[A-Za-z]:[\\\/]|[\\\/])/i.test(t)) return ersatz;   // Pfad oder Adresse
+  if(/%[0-9A-F]{2}/i.test(t)) return ersatz;                                    // kodierte Adresse
+  if(/\.(txt|docx?|pdf|indd|qxd|rtf|tex|odt)\s*$/i.test(t)) return ersatz;       // Dateiname
+  if(/^(untitled|unbenannt|dokument\d*|document\d*|microsoft word|print|layout|druck)/i.test(t))
+    return ersatz;
+  if(/[\\\/]{2,}/.test(t)) return ersatz;
+  return t;
 }
 
 const buchId = (name, groesse) => name.replace(/\.pdf$/i,'') + '|' + groesse;
