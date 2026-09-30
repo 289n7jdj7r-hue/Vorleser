@@ -203,6 +203,13 @@
   }
   .wort__text{font-size:15px;line-height:1.6;color:#2A2D34}
   .wort__text i{color:#5C6270}
+  .wort__jp{font-family:var(--font-read);font-size:24px;line-height:1.3}
+  .wort__jp small{font-size:17px;color:#5C6270;margin-left:12px}
+  .kanji{display:flex;align-items:baseline;gap:12px;padding:6px 0;border-bottom:1px solid #E6E1D6}
+  .kanji:last-child{border-bottom:none}
+  .kanji b{font-size:26px;font-weight:500;min-width:34px}
+  .kanji span{font-size:14.5px;color:#2A2D34}
+  .kanji i{font-size:12.5px;color:#7A7466;font-style:normal;margin-left:auto;white-space:nowrap}
   .wort__knoepfe{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px}
   .wort__warte{color:#8A8371;font-size:13.5px;font-style:italic}
   .vok{border-left:3px solid var(--petrol);background:#EEF3F3}
@@ -748,7 +755,7 @@
 (function(){
 "use strict";
 
-const APP_VERSION = 'v41';
+const APP_VERSION = 'v43';
 
 /* ══ Elemente ═══════════════════════════════════════════ */
 const $ = id => document.getElementById(id);
@@ -3135,17 +3142,28 @@ async function geminiModellListe(key){
   return geminiModelle;
 }
 
-async function erklaeren(wort, kontext, quelle){
+async function erklaeren(wort, kontext, quelle, jap){
   geminiGrund = '';
   const key = gKeyWert || '';
   if(!key) return null;
   const modelle = await geminiModellListe(key);
-  const prompt = 'Wort: "' + wort + '" (Sprache ' + (quelle || 'unbekannt') + '). Kontext: "'
-    + kontext.replace(/"/g, "'") + '".\n'
+  let prompt = 'Wort: "' + wort + '" (Sprache ' + (quelle || 'unbekannt') + ').\n'
+    + 'Textstelle, in der es steht: "' + kontext.replace(/"/g, "'") + '".\n'
     + 'Antworte NUR mit JSON, ohne Erklärung davor oder danach:\n'
-    + '{"erklaerung_de":"ein Satz auf Deutsch, was das Wort hier bedeutet",'
-    + '"erklaerung_en":"one sentence in English","beispiel_de":"ein natürlicher deutscher Beispielsatz",'
-    + '"beispiel_en":"one natural English example sentence","aussprache":"IPA oder Umschrift"}';
+    + '{"im_satz_de":"ein Satz auf Deutsch: was das Wort GENAU IN DIESER TEXTSTELLE ausdrückt, '
+    + 'mit Bezug auf die konkrete Situation dort — keine allgemeine Definition",'
+    + '"erklaerung_de":"die allgemeine Bedeutung des Wortes in einem Satz",'
+    + '"erklaerung_en":"the general meaning in one English sentence",'
+    + '"beispiel_de":"ein natürlicher deutscher Beispielsatz mit dem Wort in derselben Bedeutung wie in der Textstelle",'
+    + '"beispiel_en":"one natural English example sentence, same sense as in the passage",'
+    + '"aussprache":"IPA"';
+  if(jap){
+    prompt += ',"kana":"die übliche Lesung des japanischen Wortes ' + jap
+      + ' in Hiragana, bei Fremdwörtern in Katakana, keine Romaji",'
+      + '"kanji":[{"zeichen":"ein einzelnes Kanji aus ' + jap + '","bedeutung":"kurze deutsche Bedeutung",'
+      + '"lesung":"Kun-Lesung und On-Lesung in Kana, z. B. わる · アク"}]';
+  }
+  prompt += '}';
   const fehler = [];
   for(const m of modelle){
     // Zwei Anläufe je Modell: erst mit gedrosseltem Nachdenken (neue Modelle),
@@ -3228,7 +3246,7 @@ function wortKarte(t, gespeichert){
   const ziel = lang === 'de' ? 'en' : 'de';
   const daten = gespeichert || { wort:t.wort, kontext:t.kontext, uebersetzung:'', quelle, ziel,
                                  erklaerung_de:'', erklaerung_en:'', beispiel_de:'', beispiel_en:'',
-                                 aussprache:'', japanisch:'' };
+                                 aussprache:'', japanisch:'', kana:'', kanji:[], im_satz_de:'' };
 
   const zeile = (titel, text, kursiv) => {
     if(!text) return;
@@ -3243,7 +3261,29 @@ function wortKarte(t, gespeichert){
     inhalt.innerHTML = '';
     u.textContent = daten.uebersetzung || '…';
     if(daten.aussprache) zeile('Aussprache', daten.aussprache);
-    if(daten.japanisch) zeile('Japanisch', daten.japanisch);
+    if(daten.japanisch){
+      const z = document.createElement('div'); z.className = 'wort__zeile'; z.textContent = 'Japanisch';
+      const p = document.createElement('div'); p.className = 'wort__jp';
+      p.textContent = daten.japanisch;
+      if(daten.kana && daten.kana !== daten.japanisch){
+        const k = document.createElement('small'); k.textContent = daten.kana; p.appendChild(k);
+      }
+      inhalt.appendChild(z); inhalt.appendChild(p);
+      if(Array.isArray(daten.kanji) && daten.kanji.length){
+        const z2 = document.createElement('div'); z2.className = 'wort__zeile'; z2.textContent = 'Die einzelnen Kanji';
+        inhalt.appendChild(z2);
+        daten.kanji.forEach(k => {
+          if(!k || !k.zeichen) return;
+          const r = document.createElement('div'); r.className = 'kanji';
+          const b = document.createElement('b'); b.textContent = k.zeichen;
+          const s = document.createElement('span'); s.textContent = k.bedeutung || '';
+          const i = document.createElement('i'); i.textContent = k.lesung || '';
+          r.appendChild(b); r.appendChild(s); r.appendChild(i);
+          inhalt.appendChild(r);
+        });
+      }
+    }
+    zeile('In diesem Satz', daten.im_satz_de);
     zeile('Erklärung · Deutsch', daten.erklaerung_de);
     zeile('Explanation · English', daten.erklaerung_en);
     zeile('Beispiel · Deutsch', daten.beispiel_de, true);
@@ -3264,7 +3304,11 @@ function wortKarte(t, gespeichert){
   };
   const b3 = document.createElement('button'); b3.className = 'dunkel'; b3.textContent = 'Schließen';
   b3.onclick = () => { el.sheet.hidden = true; };
-  knoepfe.appendChild(b1); knoepfe.appendChild(b2); knoepfe.appendChild(b3);
+  const bJ = document.createElement('button'); bJ.className = 'dunkel'; bJ.textContent = '🔊 Japanisch';
+  bJ.hidden = !daten.japanisch;
+  bJ.onclick = () => sprich(daten.japanisch, 'ja');
+  knoepfe.appendChild(b1); knoepfe.appendChild(bJ); knoepfe.appendChild(b2); knoepfe.appendChild(b3);
+  const jpKnopf = () => { bJ.hidden = !daten.japanisch; };
 
   if(gespeichert){ zeichnen(); return; }
 
@@ -3289,15 +3333,16 @@ function wortKarte(t, gespeichert){
       if(erkannt) daten.quelle = erkannt;
       zeichnen();
       if(japanisch){
-        try{ daten.japanisch = (await uebersetzen(daten.wort, 'ja')).text; zeichnen(); }catch(e){}
+        try{ daten.japanisch = (await uebersetzen(daten.wort, 'ja')).text; zeichnen(); jpKnopf(); }catch(e){}
       }
       const w2 = document.createElement('div'); w2.className = 'wort__warte';
       if(gKeyWert){ w2.textContent = 'Erklärung und Beispiele werden geholt …'; inhalt.appendChild(w2); }
-      const erk = await erklaeren(daten.wort, daten.kontext, daten.quelle);
+      const erk = await erklaeren(daten.wort, daten.kontext, daten.quelle, daten.japanisch);
       w2.remove();
       if(erk){
-        ['erklaerung_de','erklaerung_en','beispiel_de','beispiel_en','aussprache']
+        ['im_satz_de','erklaerung_de','erklaerung_en','beispiel_de','beispiel_en','aussprache','kana']
           .forEach(k => { if(erk[k]) daten[k] = String(erk[k]); });
+        if(Array.isArray(erk.kanji)) daten.kanji = erk.kanji.filter(k => k && k.zeichen);
         zeichnen();
       } else {
         const hinweis = document.createElement('div'); hinweis.className = 'wort__warte';
@@ -3325,6 +3370,7 @@ function zeigeVokabeln(){
     let out = 'Vokabeln\\n\\n';
     vokabeln.forEach(v => {
       out += v.wort + ' — ' + v.uebersetzung + (v.japanisch ? ' — ' + v.japanisch : '') + '\\n';
+      if(v.im_satz_de) out += '  Im Satz: ' + v.im_satz_de + '\\n';
       if(v.erklaerung_de) out += '  ' + v.erklaerung_de + '\\n';
       if(v.beispiel_de) out += '  „' + v.beispiel_de + '"\\n';
       if(v.beispiel_en) out += '  "' + v.beispiel_en + '"\\n';
@@ -3347,7 +3393,8 @@ function zeigeVokabeln(){
     const d = document.createElement('div'); d.className = 'mark vok';
     d.style.cursor = 'pointer';
     d.innerHTML = '<b>' + v.wort.replace(/</g,'&lt;') + '</b> — ' + (v.uebersetzung||'').replace(/</g,'&lt;')
-      + (v.japanisch ? ' <span style="color:#6B6558">· ' + v.japanisch.replace(/</g,'&lt;') + '</span>' : '');
+      + (v.japanisch ? ' <span style="color:#6B6558">· ' + v.japanisch.replace(/</g,'&lt;')
+         + (v.kana ? ' ' + v.kana.replace(/</g,'&lt;') : '') + '</span>' : '');
     const f = document.createElement('div'); f.className = 'mark__foot';
     const s = document.createElement('span'); s.textContent = v.buch + ' · Seite ' + v.seite;
     f.appendChild(s);
