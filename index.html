@@ -184,6 +184,18 @@
   }
   .stoerung span{flex:1}
   .stoerung b{display:block;margin-bottom:3px;font-size:14.5px}
+  .zurueck{
+    position:fixed;left:50%;transform:translateX(-50%);
+    bottom:calc(24px + env(safe-area-inset-bottom));z-index:34;
+    background:var(--marker);color:#1A1508;border:none;border-radius:999px;
+    padding:10px 18px;font:600 13px var(--font-ui);cursor:pointer;
+    box-shadow:0 8px 22px rgba(0,0,0,.35);transition:opacity .2s,transform .2s;
+  }
+  .zurueck:hover{transform:translateX(-50%) translateY(-1px)}
+  @media (max-width:640px){
+    .zurueck{bottom:calc(92px + env(safe-area-inset-bottom));left:16px;transform:none;padding:9px 14px;font-size:12px}
+    .zurueck:hover{transform:none}
+  }
   .umbruch{display:none}
   .minibar{display:none}
   .minibar__info{
@@ -718,6 +730,8 @@
   </main>
 </div>
 
+<button class="zurueck" id="bZurStelle" hidden>↑ Zur Vorlesestelle</button>
+
 <div class="minibar" id="minibar" hidden>
   <button class="tbtn" id="mPrev" aria-label="Satz zurück">
     <svg viewBox="0 0 24 24"><path d="M18 5v14L8 12z"/><path d="M6 5h2.2v14H6z"/></svg>
@@ -755,7 +769,7 @@
 (function(){
 "use strict";
 
-const APP_VERSION = 'v43';
+const APP_VERSION = 'v44';
 
 /* ══ Elemente ═══════════════════════════════════════════ */
 const $ = id => document.getElementById(id);
@@ -1486,6 +1500,7 @@ function paint(){
     + '  ·  <b>' + Math.round(idx / Math.max(1, units.length - 1) * 100) + ' %</b>'
     + (schlafAn ? '  ·  Schlaf <b>' + Math.max(0, Math.ceil(schlafRest/60000)) + '</b>' : '');
   if(follow && !userScrolled && marke) scrollTo(marke);
+  else if(marke) knopfPruefen();
   sperrbildschirm();
   standSichern(false);
 }
@@ -1919,6 +1934,7 @@ function stop(){
 function jump(to, keepPlaying){
   idx = Math.max(0, Math.min(units.length-1, to));
   userScrolled = false;
+  $('bZurStelle').hidden = true;
   if(keepPlaying || mode === 'playing') play(idx);
   else { gen++; synth.cancel(); mode='idle'; icons(); paint(); }
 }
@@ -3539,16 +3555,37 @@ el.bTxt.onclick = () => {
   setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
 };
 
-let scrollUhr = null;
+/* Manuelles Scrollen schaltet das Mitlaufen aus — und es bleibt aus,
+   bis du selbst zurückwillst. Kein Timer, kein Zurückreißen. */
+function stelleSichtbar(){
+  const m = el.doc.querySelector('.sent.now');
+  if(!m) return true;
+  const r = m.getBoundingClientRect();
+  const oben = handy ? (parseFloat(getComputedStyle(document.documentElement)
+                        .getPropertyValue('--kopf')) || 58) : 0;
+  const box = handy ? {top: oben, bottom: window.innerHeight - 90}
+                    : el.scroller.getBoundingClientRect();
+  return r.bottom > box.top && r.top < box.bottom;
+}
+function knopfPruefen(){
+  const zeigen = units.length && userScrolled && !stelleSichtbar();
+  $('bZurStelle').hidden = !zeigen;
+}
+let pruefUhr = null;
 function handScroll(){
   if(scrollLock) return;
   const pos = handy ? window.scrollY : el.scroller.scrollTop;
   if(zielScroll !== null && Math.abs(pos - zielScroll) < 80) return;   // das waren wir
   userScrolled = true;
-  clearTimeout(scrollUhr);
-  // Nach kurzer Ruhe läuft der Text wieder von selbst mit
-  scrollUhr = setTimeout(() => { userScrolled = false; }, 12000);
+  clearTimeout(pruefUhr);
+  pruefUhr = setTimeout(knopfPruefen, 150);
 }
+$('bZurStelle').onclick = () => {
+  userScrolled = false;
+  $('bZurStelle').hidden = true;
+  const m = el.doc.querySelector('.sent.now');
+  if(m) scrollTo(m);
+};
 el.scroller.addEventListener('scroll', handScroll, {passive:true});
 window.addEventListener('scroll', handScroll, {passive:true});
 el.scroller.addEventListener('click', e => { if(e.target === el.scroller || e.target === el.doc) userScrolled = false; });
