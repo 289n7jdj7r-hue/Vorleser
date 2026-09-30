@@ -748,7 +748,7 @@
 (function(){
 "use strict";
 
-const APP_VERSION = 'v39';
+const APP_VERSION = 'v40';
 
 /* ══ Elemente ═══════════════════════════════════════════ */
 const $ = id => document.getElementById(id);
@@ -3113,12 +3113,33 @@ async function uebersetzen(text, ziel){
 }
 
 /* Erklärung und Beispiele über ein Sprachmodell — fällt still aus, wenn nicht freigeschaltet */
-let geminiGrund = '';
+let geminiGrund = '', geminiModelle = null;
+
+/* Fragt Google, welche Modelle es gibt, und nimmt das neueste Flash.
+   Feste Nummern veralten — 2.0 wurde abgeschaltet, 3.8 ist aktuell. */
+async function geminiModellListe(key){
+  if(geminiModelle) return geminiModelle;
+  const rueckfall = ['gemini-3.8-flash', 'gemini-3.5-flash', 'gemini-3-flash', 'gemini-2.5-flash'];
+  try{
+    const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models?key='
+      + encodeURIComponent(key) + '&pageSize=200');
+    if(!r.ok) return geminiModelle = rueckfall;
+    const d = await r.json();
+    const kandidaten = (d.models || [])
+      .filter(m => (m.supportedGenerationMethods || []).indexOf('generateContent') >= 0)
+      .map(m => (m.name || '').replace(/^models\//, ''))
+      .filter(n => /^gemini-[\d.]+-flash$/.test(n))          // nur „echte" Flash-Modelle
+      .sort((a, b) => parseFloat(b.match(/[\d.]+/)[0]) - parseFloat(a.match(/[\d.]+/)[0]));
+    geminiModelle = kandidaten.length ? kandidaten.concat(rueckfall) : rueckfall;
+  }catch(e){ geminiModelle = rueckfall; }
+  return geminiModelle;
+}
+
 async function erklaeren(wort, kontext, quelle){
   geminiGrund = '';
   const key = gKeyWert || '';
   if(!key) return null;
-  const modelle = ['gemini-2.5-flash', 'gemini-2.0-flash'];
+  const modelle = await geminiModellListe(key);
   const prompt = 'Wort: "' + wort + '" (Sprache ' + (quelle || 'unbekannt') + '). Kontext: "'
     + kontext.replace(/"/g, "'") + '".\n'
     + 'Antworte NUR mit JSON, ohne Erklärung davor oder danach:\n'
@@ -3243,9 +3264,17 @@ function wortKarte(t, gespeichert){
 
   (async () => {
     try{
-      const ue = await uebersetzen(daten.wort, ziel);
+      // Erst raten, dann nach der erkannten Sprache korrigieren:
+      // englisches Wort -> Deutsch, deutsches Wort -> Englisch
+      let ue = await uebersetzen(daten.wort, ziel);
+      const erkannt = (ue.von || '').slice(0, 2).toLowerCase();
+      if(erkannt && erkannt === ziel){
+        const anders = ziel === 'de' ? 'en' : 'de';
+        ue = await uebersetzen(daten.wort, anders);
+        daten.ziel = anders;
+      }
       daten.uebersetzung = ue.text;
-      if(ue.von) daten.quelle = ue.von;
+      if(erkannt) daten.quelle = erkannt;
       zeichnen();
       if(japanisch){
         try{ daten.japanisch = (await uebersetzen(daten.wort, 'ja')).text; zeichnen(); }catch(e){}
