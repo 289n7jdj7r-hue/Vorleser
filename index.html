@@ -748,7 +748,7 @@
 (function(){
 "use strict";
 
-const APP_VERSION = 'v40';
+const APP_VERSION = 'v41';
 
 /* ══ Elemente ═══════════════════════════════════════════ */
 const $ = id => document.getElementById(id);
@@ -3146,28 +3146,40 @@ async function erklaeren(wort, kontext, quelle){
     + '{"erklaerung_de":"ein Satz auf Deutsch, was das Wort hier bedeutet",'
     + '"erklaerung_en":"one sentence in English","beispiel_de":"ein natürlicher deutscher Beispielsatz",'
     + '"beispiel_en":"one natural English example sentence","aussprache":"IPA oder Umschrift"}';
+  const fehler = [];
   for(const m of modelle){
-    try{
-      const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + m
-        + ':generateContent?key=' + encodeURIComponent(key), {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ contents:[{parts:[{text:prompt}]}],
-                               generationConfig:{temperature:0.3, maxOutputTokens:400} })
-      });
-      if(!r.ok){
-        try{ const j = await r.json(); geminiGrund = (j.error && j.error.message) || ('HTTP ' + r.status); }
-        catch(e){ geminiGrund = 'HTTP ' + r.status; }
-        continue;
-      }
-      const d = await r.json();
-      const roh = (((d.candidates||[])[0]||{}).content||{}).parts;
-      const txt = roh ? roh.map(p => p.text || '').join('') : '';
-      const j = txt.replace(/```json|```/g, '').trim();
-      const von = j.indexOf('{'), bis = j.lastIndexOf('}');
-      if(von < 0 || bis < 0) continue;
-      return JSON.parse(j.slice(von, bis + 1));
-    }catch(e){ /* nächstes Modell */ }
+    // Zwei Anläufe je Modell: erst mit gedrosseltem Nachdenken (neue Modelle),
+    // dann ohne diese Angabe (ältere Modelle kennen sie nicht)
+    const varianten = [
+      { temperature:0.3, maxOutputTokens:1500, thinkingConfig:{ thinkingLevel:'low' } },
+      { temperature:0.3, maxOutputTokens:1500 }
+    ];
+    for(const cfg of varianten){
+      try{
+        const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + m
+          + ':generateContent', {
+          method:'POST',
+          headers:{'Content-Type':'application/json', 'x-goog-api-key': key},
+          body: JSON.stringify({ contents:[{parts:[{text:prompt}]}], generationConfig: cfg })
+        });
+        if(!r.ok){
+          let g = 'HTTP ' + r.status;
+          try{ const j = await r.json(); g = (j.error && j.error.message) || g; }catch(e){}
+          if(r.status === 400 && cfg.thinkingConfig) continue;   // Angabe unbekannt -> ohne
+          fehler.push(m + ': ' + g);
+          break;
+        }
+        const d = await r.json();
+        const teile = (((d.candidates||[])[0]||{}).content||{}).parts || [];
+        const txt = teile.filter(p => !p.thought).map(p => p.text || '').join('');
+        const j = txt.replace(/```json|```/g, '').trim();
+        const von = j.indexOf('{'), bis = j.lastIndexOf('}');
+        if(von < 0 || bis < 0){ fehler.push(m + ': leere Antwort'); break; }
+        return JSON.parse(j.slice(von, bis + 1));
+      }catch(e){ fehler.push(m + ': ' + (e.message || e)); break; }
+    }
   }
+  geminiGrund = fehler.slice(0, 2).join('  ·  ');
   return null;
 }
 
