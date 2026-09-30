@@ -6,6 +6,8 @@
 <title>Vorleser — PDFs hören</title>
 <meta name="description" content="PDFs im Browser vorlesen lassen. Nichts wird hochgeladen.">
 <meta name="theme-color" content="#191C22">
+<meta name="color-scheme" content="light">
+<meta name="darkreader-lock">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="favicon.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -56,7 +58,7 @@
   /* ── Konsole ─────────────────────────────────────────── */
   .console{
     background:var(--console);border-bottom:1px solid var(--line);
-    flex:0 1 auto;z-index:5;max-height:78dvh;
+    flex:0 0 auto;z-index:5;max-height:78dvh;   /* nie zusammendrücken lassen */
     overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;
   }
   .console__row{display:flex;align-items:center;gap:18px;padding:12px 18px;flex-wrap:wrap}
@@ -746,7 +748,7 @@
 (function(){
 "use strict";
 
-const APP_VERSION = 'v37';
+const APP_VERSION = 'v39';
 
 /* ══ Elemente ═══════════════════════════════════════════ */
 const $ = id => document.getElementById(id);
