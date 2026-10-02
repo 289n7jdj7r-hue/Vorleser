@@ -393,8 +393,12 @@
 
     .center{
       position:static;display:block;min-height:62dvh;overflow:visible;
-      padding:26px 20px calc(90px + env(safe-area-inset-bottom));
+      padding:14px 20px calc(90px + env(safe-area-inset-bottom));
     }
+    #startBild{width:min(180px,50vw) !important;margin-bottom:12px !important}
+    .card h1{font-size:1.3rem;margin-bottom:8px}
+    .card p{margin-bottom:14px}
+    .eyebrow{margin-bottom:8px}
     /* Laden und Fehler legen sich über alles, statt unter dem Text zu landen */
     #busy,#fail{
       position:fixed;inset:0;z-index:30;display:grid;place-items:center;
@@ -550,7 +554,7 @@
           <input type="number" id="pTo" min="1" value="1" style="width:76px">
         </span>
       </div>
-      <div class="field">
+      <div class="field" hidden>
         <label for="cols">Spaltenlayout</label>
         <select id="cols">
           <option value="auto">automatisch</option>
@@ -571,7 +575,7 @@
         <span style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="ghost" id="bFollow" aria-pressed="true">Text mitlaufen lassen</button>
           <button class="ghost" id="bFiguren" aria-pressed="false">Abbildungen anzeigen</button>
-          <button class="ghost" id="bTitelei" aria-pressed="true">Titelei überspringen</button>
+          <button class="ghost" id="bTitelei" aria-pressed="true" hidden>Titelei überspringen</button>
           <button class="ghost" id="bAnfang">Zum Textanfang</button>
         </span>
       </div>
@@ -620,7 +624,12 @@
 
       <div class="field" style="flex:1 1 100%;border-top:1px solid var(--line);padding-top:14px">
         <label style="color:var(--marker)">Wörter nachschlagen — lang antippen (am Rechner Doppelklick)</label>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:6px">
+        <p id="uKurz" hidden style="margin:8px 0 0;display:flex;gap:12px;align-items:center;
+           font-family:var(--font-mono);font-size:11px;letter-spacing:.08em;color:#9AA2B2">
+          <span id="uKurzText"></span>
+          <button class="ghost" id="uAendern" style="padding:5px 10px">ändern</button>
+        </p>
+        <div id="uConfig" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:6px">
           <div class="field">
             <label for="uKey">Google-Schlüssel</label>
             <input type="password" id="uKey" placeholder="nur nötig, wenn Chirp nicht verbunden ist" style="width:210px;
@@ -635,7 +644,7 @@
           </div>
           <button class="ghost" id="uSpeichern">Übernehmen</button>
           <button class="ghost" id="uJapan" aria-pressed="false">Japanisch dazu</button>
-          <button class="ghost" id="bVok">Vokabeln <span id="vokCount" style="opacity:.6"></span></button>
+          <button class="ghost" id="bVok" hidden>Vokabeln <span id="vokCount" style="opacity:.6"></span></button>
         </div>
         <p id="uStatus" style="margin:10px 0 0;font-family:var(--font-mono);font-size:10px;
            letter-spacing:.1em;color:#697082"></p>
@@ -646,10 +655,12 @@
         <span style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="ghost" id="bVoices">Stimmen im System</button>
           <button class="ghost" id="bFrisch">App neu laden</button>
-          <button class="ghost" id="bTxt" title="Exportiert den ganzen Buchtext als Datei">Buchtext exportieren</button>
+          <button class="ghost" id="bTxt" hidden>Buchtext exportieren</button>
+          <button class="ghost" id="bSichern" title="Schlüssel, Sammlung, Vokabeln und Lesestände als Datei">Sicherung speichern</button>
+          <button class="ghost" id="bWiederher">Sicherung laden</button>
         </span>
       </div>
-      <div class="field">
+      <div class="field" hidden>
         <label>Datei</label>
         <span style="display:flex;gap:8px">
           <button class="ghost" id="bNew">PDF laden</button>
@@ -697,6 +708,10 @@
     <!-- Leerzustand -->
     <div class="center" id="empty">
       <div class="card">
+        <img id="startBild" alt="" hidden style="width:min(260px,70vw);aspect-ratio:1;object-fit:cover;
+             border-radius:18px;margin:0 auto 18px;display:block;box-shadow:0 10px 30px rgba(0,0,0,.18)">
+        <p id="startBildQuelle" hidden style="margin:-10px 0 16px;font-family:var(--font-mono);font-size:9px;
+           letter-spacing:.1em;text-transform:uppercase;color:#A39C8B"></p>
         <p class="eyebrow">PDF hierher ziehen</p>
         <h1>Lass dir vorlesen,<br>was du sonst lesen müsstest.</h1>
         <p>Text wird direkt im Browser aus der PDF gelöst. Geladene Bücher bleiben dauerhaft im Gerät — auch ohne Internet.</p>
@@ -769,7 +784,7 @@
 (function(){
 "use strict";
 
-const APP_VERSION = 'v46';
+const APP_VERSION = 'v47';
 
 /* ══ Elemente ═══════════════════════════════════════════ */
 const $ = id => document.getElementById(id);
@@ -1282,10 +1297,34 @@ function render(){
 }
 
 /* Ein einziger Zuhörer für das ganze Dokument statt einer je Satz */
+/* Antippen springt zum genauen Satz, nicht zum Absatzanfang */
 el.doc.addEventListener('click', e => {
   const p = e.target.closest ? e.target.closest('p.abs') : null;
   if(!p || !units.length) return;
-  jump(parseInt(p.dataset.von, 10) || 0, mode === 'playing');
+  let ziel = parseInt(p.dataset.von, 10) || 0;
+  try{
+    let range = null;
+    if(document.caretRangeFromPoint) range = document.caretRangeFromPoint(e.clientX, e.clientY);
+    else if(document.caretPositionFromPoint){
+      const pp = document.caretPositionFromPoint(e.clientX, e.clientY);
+      if(pp){ range = document.createRange(); range.setStart(pp.offsetNode, pp.offset); }
+    }
+    if(range && p.contains(range.startContainer)){
+      const r2 = document.createRange();
+      r2.setStart(p, 0); r2.setEnd(range.startContainer, range.startOffset);
+      const off = r2.toString().length;
+      const nr = absatzFuer(ziel);
+      const a = absaetze[nr];
+      if(a){
+        let acc = 0;
+        for(let k = 0; k < a.texte.length; k++){
+          acc += a.texte[k].length + 1;
+          if(off < acc){ ziel = a.von + k; break; }
+        }
+      }
+    }
+  }catch(err){}
+  jump(ziel, mode === 'playing');
 });
 
 /* Erkennt echten Fließtext — Titelseiten, Impressum, Inhalts-
@@ -2389,12 +2428,27 @@ $('bTitelei').onclick = () => {
   try{ localStorage.setItem('vorleser.titelei', ueberspringeTitelei ? '1' : '0'); }catch(e){}
   melde(ueberspringeTitelei ? 'Titelei wird übersprungen' : 'Beginnt jetzt bei Seite 1');
 };
-try{
-  if(localStorage.getItem('vorleser.titelei') === '0'){
-    ueberspringeTitelei = false;
-    $('bTitelei').setAttribute('aria-pressed', 'false');
-  }
-}catch(e){}
+ueberspringeTitelei = true;   // Titelei wird immer übersprungen
+
+/* Startbild: bei jedem Öffnen ein anderes — nur jugendfreie Kategorien */
+async function startBildLaden(){
+  const img = $('startBild'), q = $('startBildQuelle');
+  if(!img || !navigator.onLine) return;
+  const kat = ['neko','waifu','husbando','kitsune'][Math.floor(Math.random() * 4)];
+  try{
+    const r = await fetch('https://nekos.best/api/v2/' + kat, {cache:'no-store'});
+    if(!r.ok) return;
+    const d = await r.json();
+    const t = d.results && d.results[0];
+    if(!t || !t.url) return;
+    img.onload = () => {
+      img.hidden = false;
+      if(q && t.artist_name){ q.textContent = 'Bild: ' + t.artist_name; q.hidden = false; }
+    };
+    img.src = t.url;
+  }catch(e){}
+}
+startBildLaden();
 $('bAnfang').onclick = zumTextanfang;
 el.cols.onchange = build;
 el.pFrom.onchange = el.pTo.onchange = build;
@@ -2447,68 +2501,137 @@ function merken(){
            : 'Gemerkt, aber nur für diese Sitzung');
 }
 
-function zeigeSammlung(){
-  $('sheetTitel').textContent = 'Gemerkte Sätze';
+let sammlungReiter = 'saetze';
+const aufgeklappt = {};   // Buch -> offen?
+
+function zeigeSammlung(reiter){
+  if(typeof reiter === 'string') sammlungReiter = reiter;
+  $('sheetTitel').textContent = 'Sammlung';
   el.bExport.hidden = false;
   el.bExport.textContent = 'Sichern';
-  el.bExport.onclick = markenExport;
+  el.bExport.onclick = sammlungReiter === 'saetze' ? markenExport : vokabelnExport;
   el.sheetList.innerHTML = '';
-  if(!marken.length){
-    el.sheetList.innerHTML = '<p class="sheet__leer">Noch nichts gemerkt.<br>'
-      + 'Beim Hören auf das Lesezeichen tippen oder <b>M</b> drücken — '
-      + 'der gerade gesprochene Satz landet hier.</p>';
-    el.sheet.hidden = false;
+  el.sheet.hidden = false;
+
+  const leiste = document.createElement('div');
+  leiste.style.cssText = 'display:flex;gap:8px;margin:14px 0 6px;flex-wrap:wrap;align-items:center';
+  [['saetze','Sätze',marken.length],['vokabeln','Vokabeln',vokabeln.length]].forEach(([id,name,n]) => {
+    const b = document.createElement('button'); b.className = 'dunkel';
+    b.textContent = name + (n ? ' · ' + n : '');
+    if(sammlungReiter === id){ b.style.borderColor = 'var(--petrol)'; b.style.color = 'var(--petrol)'; }
+    b.onclick = () => zeigeSammlung(id);
+    leiste.appendChild(b);
+  });
+  const alle = document.createElement('button'); alle.className = 'dunkel'; alle.style.marginLeft = 'auto';
+  leiste.appendChild(alle);
+  el.sheetList.appendChild(leiste);
+
+  const liste = sammlungReiter === 'saetze' ? marken : vokabeln;
+  if(!liste.length){
+    alle.hidden = true;
+    const p = document.createElement('p'); p.className = 'sheet__leer';
+    p.innerHTML = sammlungReiter === 'saetze'
+      ? 'Noch nichts gemerkt.<br>Beim Hören auf das Lesezeichen tippen oder <b>M</b> drücken.'
+      : 'Noch keine Vokabeln.<br>Ein Wort im Text lang antippen (am Rechner Doppelklick), dann „Merken".';
+    el.sheetList.appendChild(p);
     return;
   }
+
   const buecher = {};
-  marken.forEach((m, i) => { (buecher[m.buch] = buecher[m.buch] || []).push([m, i]); });
-  Object.keys(buecher).forEach(name => {
-    const box = document.createElement('div');
-    box.className = 'book';
+  liste.forEach((m, i) => { (buecher[m.buch] = buecher[m.buch] || []).push([m, i]); });
+  const namen = Object.keys(buecher);
+  namen.forEach(n => { if(!(n in aufgeklappt)) aufgeklappt[n] = namen.length === 1; });
+  const alleOffen = namen.every(n => aufgeklappt[n]);
+  alle.textContent = alleOffen ? 'Alle zuklappen' : 'Alle aufklappen';
+  alle.onclick = () => { namen.forEach(n => aufgeklappt[n] = !alleOffen); zeigeSammlung(); };
+
+  namen.forEach(name => {
+    const box = document.createElement('div'); box.className = 'book';
     const h3 = document.createElement('h3');
-    h3.textContent = name + ' · ' + buecher[name].length;
+    h3.style.cursor = 'pointer';
+    h3.textContent = (aufgeklappt[name] ? '▾ ' : '▸ ') + name + ' · ' + buecher[name].length;
+    h3.onclick = () => { aufgeklappt[name] = !aufgeklappt[name]; zeigeSammlung(); };
     box.appendChild(h3);
-    buecher[name].forEach(paar => {
-      const m = paar[0], i = paar[1];
-      const d = document.createElement('div');
-      d.className = 'mark';
-      d.textContent = m.satz;
-      const f = document.createElement('div');
-      f.className = 'mark__foot';
-      const s = document.createElement('span');
-      s.textContent = 'Seite ' + m.seite;
-      if(m.buch === buchTitel() && typeof m.idx === 'number'){
-        const g = document.createElement('button');
-        g.textContent = 'Hingehen';
-        g.onclick = () => {
-          el.sheet.hidden = true;
-          if(m.von && m.von !== (parseInt(el.pFrom.value,10) || 1) && pdfDoc){
-            zielSeite = m.seite;
-            el.pFrom.value = m.von;
-            el.pTo.value = Math.min(pdfDoc.numPages, m.von + BLOCK - 1);
-            build();
-            return;
-          }
-          jump(Math.min(m.idx, units.length - 1), false);
-        };
-        f.appendChild(g);
-      }
-      const k = document.createElement('button');
-      k.textContent = 'Kopieren';
-      k.onclick = () => {
-        navigator.clipboard.writeText(m.satz).then(
-          () => melde('Kopiert'), () => melde('Kopieren nicht möglich'));
-      };
-      const w = document.createElement('button');
-      w.textContent = 'Löschen';
-      w.onclick = () => { marken.splice(i, 1); sichereMarken(); zeigeSammlung(); };
-      f.appendChild(s); f.appendChild(k); f.appendChild(w);
-      d.appendChild(f);
-      box.appendChild(d);
-    });
+    if(aufgeklappt[name]){
+      buecher[name].forEach(paar => {
+        box.appendChild(sammlungReiter === 'saetze' ? satzKarte(paar[0], paar[1]) : vokabelKarte(paar[0], paar[1]));
+      });
+    }
     el.sheetList.appendChild(box);
   });
-  el.sheet.hidden = false;
+}
+
+function hinSpringen(m){
+  el.sheet.hidden = true;
+  if(m.von && m.von !== (parseInt(el.pFrom.value,10) || 1) && pdfDoc){
+    zielSeite = m.seite;
+    el.pFrom.value = m.von;
+    el.pTo.value = Math.min(pdfDoc.numPages, m.von + BLOCK - 1);
+    build();
+    return;
+  }
+  jump(Math.min(m.idx, units.length - 1), false);
+}
+
+function satzKarte(m, i){
+  const d = document.createElement('div'); d.className = 'mark';
+  d.textContent = m.satz;
+  const f = document.createElement('div'); f.className = 'mark__foot';
+  const s = document.createElement('span'); s.textContent = 'Seite ' + m.seite;
+  f.appendChild(s);
+  if(m.buch === buchTitel() && typeof m.idx === 'number'){
+    const g = document.createElement('button'); g.textContent = 'Hingehen';
+    g.onclick = () => hinSpringen(m); f.appendChild(g);
+  }
+  const k = document.createElement('button'); k.textContent = 'Kopieren';
+  k.onclick = () => navigator.clipboard.writeText(m.satz).then(() => melde('Kopiert'), () => melde('Kopieren nicht möglich'));
+  const w = document.createElement('button'); w.textContent = 'Löschen';
+  w.onclick = () => { marken.splice(i, 1); sichereMarken(); zeigeSammlung(); };
+  f.appendChild(k); f.appendChild(w); d.appendChild(f);
+  return d;
+}
+
+function vokabelKarte(v, i){
+  const d = document.createElement('div'); d.className = 'mark vok';
+  d.style.cursor = 'pointer';
+  d.innerHTML = '<b>' + v.wort.replace(/</g,'&lt;') + '</b> — ' + (v.uebersetzung||'…').replace(/</g,'&lt;')
+    + (v.japanisch ? ' <span style="color:#6B6558">· ' + v.japanisch.replace(/</g,'&lt;')
+       + (v.kana ? ' ' + v.kana.replace(/</g,'&lt;') : '') + '</span>' : '');
+  if(!v.erklaerung_de){
+    const hinweis = document.createElement('div');
+    hinweis.style.cssText = 'font-size:12px;color:#9A6B2A;margin-top:4px';
+    hinweis.textContent = 'ohne Erklärung — antippen zum Nachholen';
+    d.appendChild(hinweis);
+  }
+  const f = document.createElement('div'); f.className = 'mark__foot';
+  const s = document.createElement('span'); s.textContent = v.buch + ' · Seite ' + v.seite;
+  f.appendChild(s);
+  if(v.buch === buchTitel() && typeof v.idx === 'number'){
+    const g = document.createElement('button'); g.textContent = 'Hingehen';
+    g.onclick = ev => { ev.stopPropagation(); hinSpringen(v); }; f.appendChild(g);
+  }
+  const w = document.createElement('button'); w.textContent = 'Löschen';
+  w.onclick = ev => { ev.stopPropagation(); vokabeln.splice(i, 1); vokSichern(); zeigeSammlung(); };
+  f.appendChild(w); d.appendChild(f);
+  d.onclick = () => wortKarte({wort:v.wort, kontext:v.kontext||'', idx:v.idx||0}, v);
+  return d;
+}
+
+function vokabelnExport(){
+  if(!vokabeln.length){ melde('Nichts zu sichern'); return; }
+  let out = 'Vokabeln\n\n';
+  vokabeln.forEach(v => {
+    out += v.wort + ' — ' + v.uebersetzung + (v.japanisch ? ' — ' + v.japanisch + (v.kana ? ' ' + v.kana : '') : '') + '\n';
+    if(v.im_satz_de) out += '  Im Satz: ' + v.im_satz_de + '\n';
+    if(v.erklaerung_de) out += '  ' + v.erklaerung_de + '\n';
+    if(v.beispiel_de) out += '  „' + v.beispiel_de + '"\n';
+    if(v.beispiel_en) out += '  "' + v.beispiel_en + '"\n';
+    out += '  (' + v.buch + ', Seite ' + v.seite + ')\n\n';
+  });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([out], {type:'text/plain;charset=utf-8'}));
+  a.download = 'vokabeln.txt'; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 }
 
 function zeigeStimmenListe(){
@@ -2684,7 +2807,7 @@ async function verbinden(still){
     wolkeBearbeiten = false;
     wolkeSichern();
     oberflaeche();
-    try{ uebStatus(); }catch(e){}
+    try{ uebStatus(); uebOberflaeche(); }catch(e){}
     if(!still) melde('Verbunden');
   }catch(e){
     wolke.stimmen = [];
@@ -2747,6 +2870,47 @@ oberflaeche();
 $('bVoices').onclick = zeigeStimmenListe;
 
 $('verAnzeige').textContent = '· ' + APP_VERSION;
+
+/* Sicherung: alles außerhalb der Bibliothek — Schlüssel, Sammlung,
+   Vokabeln, Lesestände, Einstellungen. Die PDFs selbst sind zu groß dafür. */
+function sicherungSammeln(){
+  const daten = { app: APP_VERSION, wann: new Date().toISOString(), werte: {} };
+  try{
+    for(let i = 0; i < localStorage.length; i++){
+      const k = localStorage.key(i);
+      if(k && k.indexOf('vorleser.') === 0) daten.werte[k] = localStorage.getItem(k);
+    }
+  }catch(e){}
+  return daten;
+}
+$('bSichern').onclick = () => {
+  const d = sicherungSammeln();
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(d, null, 1)], {type:'application/json'}));
+  a.download = 'vorleser-sicherung-' + d.wann.slice(0,10) + '.json';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  melde('Sicherung gespeichert — ' + Object.keys(d.werte).length + ' Einträge');
+};
+$('bWiederher').onclick = () => {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'application/json,.json';
+  inp.onchange = async e => {
+    const f = e.target.files && e.target.files[0];
+    if(!f) return;
+    try{
+      const d = JSON.parse(await f.text());
+      if(!d || !d.werte) throw new Error('keine Vorleser-Sicherung');
+      let n = 0;
+      Object.keys(d.werte).forEach(k => {
+        if(k.indexOf('vorleser.') === 0){ localStorage.setItem(k, d.werte[k]); n++; }
+      });
+      melde(n + ' Einträge wiederhergestellt — App startet neu');
+      setTimeout(() => location.reload(), 900);
+    }catch(err){ stoerung('Sicherung konnte nicht gelesen werden: ' + (err.message || err)); }
+  };
+  inp.click();
+};
 
 $('bFrisch').onclick = async () => {
   melde('Wird erneuert …');
@@ -3095,6 +3259,7 @@ function uebLaden(){
   }catch(e){ vokabeln = []; }
   vokZaehlen();
   uebStatus();
+  uebOberflaeche();
 }
 function uebSichern(){
   try{ localStorage.setItem(U_SPEICHER, JSON.stringify({key:uKeyWert, gemini:gKeyWert, japanisch})); }catch(e){}
@@ -3104,6 +3269,19 @@ function vokSichern(){
   vokZaehlen();
 }
 function vokZaehlen(){ $('vokCount').textContent = vokabeln.length ? '· ' + vokabeln.length : ''; }
+let uBearbeiten = false;
+function uebOberflaeche(){
+  const fertig = !!uebKey() && !uBearbeiten;
+  const k = $('uKurz'), c = $('uConfig'), st = $('uStatus');
+  if(!k || !c) return;
+  k.hidden = !fertig;
+  c.style.display = fertig ? 'none' : 'flex';
+  if(st) st.hidden = fertig;
+  if(fertig){
+    $('uKurzText').textContent = 'Übersetzung' + (gKeyWert ? ' + Erklärungen' : '')
+      + (japanisch ? ' + Japanisch' : '') + ' eingerichtet';
+  }
+}
 function uebStatus(){
   const quelle = (wolke.dienst === 'google' && wolke.key && wolkeAn()) ? ' (Schlüssel von Chirp)' : '';
   $('uStatus').textContent = uebKey()
@@ -3114,8 +3292,10 @@ function uebStatus(){
 $('uSpeichern').onclick = () => {
   uKeyWert = $('uKey').value.trim();
   gKeyWert = $('gKey').value.trim();
-  uebSichern(); uebStatus(); melde('Übernommen');
+  uBearbeiten = false;
+  uebSichern(); uebStatus(); uebOberflaeche(); melde('Übernommen');
 };
+$('uAendern').onclick = () => { uBearbeiten = true; uebOberflaeche(); };
 $('uJapan').onclick = () => {
   japanisch = !japanisch;
   $('uJapan').setAttribute('aria-pressed', String(japanisch));
@@ -3352,11 +3532,15 @@ function wortKarte(t, gespeichert){
   const b2 = document.createElement('button'); b2.className = 'dunkel';
   b2.textContent = gespeichert ? 'Gemerkt' : 'Merken';
   b2.onclick = () => {
+    if(gespeichert) return;
     if(vokabeln.some(v => v.wort.toLowerCase() === daten.wort.toLowerCase())){ melde('Schon drin'); return; }
-    vokabeln.unshift(Object.assign({}, daten, {
+    // Das Objekt selbst wandert in die Liste — was später noch eintrifft, landet mit drin
+    Object.assign(daten, {
       buch: buchTitel(), seite: units[t.idx] ? units[t.idx].page : (units[idx] ? units[idx].page : 0),
       idx: t.idx, von: parseInt(el.pFrom.value, 10) || 1, wann: new Date().toISOString()
-    }));
+    });
+    vokabeln.unshift(daten);
+    daten._gemerkt = true;
     vokSichern(); b2.textContent = 'Gemerkt'; melde('In die Vokabeln gelegt');
   };
   const b3 = document.createElement('button'); b3.className = 'dunkel'; b3.textContent = 'Schließen';
@@ -3367,7 +3551,35 @@ function wortKarte(t, gespeichert){
   knoepfe.appendChild(b1); knoepfe.appendChild(bJ); knoepfe.appendChild(b2); knoepfe.appendChild(b3);
   const jpKnopf = () => { bJ.hidden = !daten.japanisch; };
 
-  if(gespeichert){ zeichnen(); return; }
+  if(gespeichert){
+    zeichnen();
+    if(gespeichert.erklaerung_de || !gKeyWert) return;
+    // Erklärung fehlt noch — jetzt nachholen und mitspeichern
+    daten._gemerkt = true;
+    const w0 = document.createElement('div'); w0.className = 'wort__warte';
+    w0.textContent = 'Erklärung wird nachgeholt …'; inhalt.appendChild(w0);
+    (async () => {
+      try{
+        if(!daten.uebersetzung){
+          const ue = await uebersetzen(daten.wort, daten.ziel || 'de');
+          daten.uebersetzung = ue.text;
+        }
+        const erk = await erklaeren(daten.wort, daten.kontext || '', daten.quelle, daten.japanisch);
+        w0.remove();
+        if(erk){
+          ['im_satz_de','erklaerung_de','erklaerung_en','beispiel_de','beispiel_en','aussprache','kana']
+            .forEach(k => { if(erk[k]) daten[k] = String(erk[k]); });
+          if(Array.isArray(erk.kanji)) daten.kanji = erk.kanji.filter(k => k && k.zeichen);
+          zeichnen(); vokSichern(); melde('Erklärung ergänzt');
+        } else {
+          const f = document.createElement('div'); f.className = 'wort__warte';
+          f.textContent = 'Nicht verfügbar' + (geminiGrund ? ' — ' + geminiGrund : '');
+          inhalt.appendChild(f);
+        }
+      }catch(e){ w0.textContent = 'Fehlgeschlagen: ' + (e.message || e); }
+    })();
+    return;
+  }
 
   const warte = document.createElement('div');
   warte.className = 'wort__warte';
@@ -3389,6 +3601,7 @@ function wortKarte(t, gespeichert){
       daten.uebersetzung = ue.text;
       if(erkannt) daten.quelle = erkannt;
       zeichnen();
+      if(daten._gemerkt) vokSichern();
       if(japanisch){
         try{ daten.japanisch = (await uebersetzen(daten.wort, 'ja')).text; zeichnen(); jpKnopf(); }catch(e){}
       }
@@ -3401,6 +3614,7 @@ function wortKarte(t, gespeichert){
           .forEach(k => { if(erk[k]) daten[k] = String(erk[k]); });
         if(Array.isArray(erk.kanji)) daten.kanji = erk.kanji.filter(k => k && k.zeichen);
         zeichnen();
+        if(daten._gemerkt) vokSichern();
       } else {
         const hinweis = document.createElement('div'); hinweis.className = 'wort__warte';
         hinweis.textContent = gKeyWert
@@ -3417,60 +3631,7 @@ function wortKarte(t, gespeichert){
   })();
 }
 
-/* Vokabelverzeichnis */
-function zeigeVokabeln(){
-  $('sheetTitel').textContent = 'Vokabeln';
-  el.bExport.hidden = false;
-  el.bExport.textContent = 'Sichern';
-  el.bExport.onclick = () => {
-    if(!vokabeln.length){ melde('Nichts zu sichern'); return; }
-    let out = 'Vokabeln\\n\\n';
-    vokabeln.forEach(v => {
-      out += v.wort + ' — ' + v.uebersetzung + (v.japanisch ? ' — ' + v.japanisch : '') + '\\n';
-      if(v.im_satz_de) out += '  Im Satz: ' + v.im_satz_de + '\\n';
-      if(v.erklaerung_de) out += '  ' + v.erklaerung_de + '\\n';
-      if(v.beispiel_de) out += '  „' + v.beispiel_de + '"\\n';
-      if(v.beispiel_en) out += '  "' + v.beispiel_en + '"\\n';
-      out += '  (' + v.buch + ', Seite ' + v.seite + ')\\n\\n';
-    });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([out], {type:'text/plain;charset=utf-8'}));
-    a.download = 'vokabeln.txt'; a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-  };
-  el.sheetList.innerHTML = '';
-  el.sheet.hidden = false;
-  if(!vokabeln.length){
-    el.sheetList.innerHTML = '<p class="sheet__leer">Noch keine Vokabeln.<br>'
-      + 'Ein Wort im Text lang antippen (am Rechner Doppelklick), dann „Merken".</p>';
-    return;
-  }
-  const box = document.createElement('div'); box.className = 'book';
-  vokabeln.forEach((v, i) => {
-    const d = document.createElement('div'); d.className = 'mark vok';
-    d.style.cursor = 'pointer';
-    d.innerHTML = '<b>' + v.wort.replace(/</g,'&lt;') + '</b> — ' + (v.uebersetzung||'').replace(/</g,'&lt;')
-      + (v.japanisch ? ' <span style="color:#6B6558">· ' + v.japanisch.replace(/</g,'&lt;')
-         + (v.kana ? ' ' + v.kana.replace(/</g,'&lt;') : '') + '</span>' : '');
-    const f = document.createElement('div'); f.className = 'mark__foot';
-    const s = document.createElement('span'); s.textContent = v.buch + ' · Seite ' + v.seite;
-    f.appendChild(s);
-    if(v.buch === buchTitel() && typeof v.idx === 'number'){
-      const g = document.createElement('button'); g.textContent = 'Hingehen';
-      g.onclick = ev => { ev.stopPropagation(); el.sheet.hidden = true;
-        jump(Math.min(v.idx, units.length - 1), false); };
-      f.appendChild(g);
-    }
-    const w = document.createElement('button'); w.textContent = 'Löschen';
-    w.onclick = ev => { ev.stopPropagation(); vokabeln.splice(i, 1); vokSichern(); zeigeVokabeln(); };
-    f.appendChild(w);
-    d.appendChild(f);
-    d.onclick = () => wortKarte({wort:v.wort, kontext:v.kontext||'', idx:v.idx||0}, v);
-    box.appendChild(d);
-  });
-  el.sheetList.appendChild(box);
-}
-$('bVok').onclick = zeigeVokabeln;
+$('bVok').onclick = () => zeigeSammlung('vokabeln');
 
 /* Lang antippen auf dem Handy, Doppelklick am Rechner */
 let druckUhr = null, druckXY = null;
@@ -3560,7 +3721,7 @@ $('bVonVorn').onclick = () => {
 };
 
 el.bMark.onclick = merken;
-el.bSheet.onclick = zeigeSammlung;
+el.bSheet.onclick = () => zeigeSammlung();
 el.bSheetZu.onclick = () => { el.sheet.hidden = true; };
 el.sheet.onclick = e => { if(e.target === el.sheet) el.sheet.hidden = true; };
 
@@ -3655,7 +3816,7 @@ document.addEventListener('visibilitychange', () => { if(document.hidden) standS
 /* ══ Als App auf dem Home-Bildschirm ═════════════════════ */
 if('serviceWorker' in navigator && location.protocol === 'https:'){
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').then(reg => {
+    navigator.serviceWorker.register('sw.js', {updateViaCache:'none'}).then(reg => {
       try{ reg.update(); }catch(e){}
       let schonNeu = false;
       navigator.serviceWorker.addEventListener('controllerchange', () => {
