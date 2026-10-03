@@ -796,7 +796,7 @@
 (function(){
 "use strict";
 
-const APP_VERSION = 'v49';
+const APP_VERSION = 'v50';
 
 /* ══ Elemente ═══════════════════════════════════════════ */
 const $ = id => document.getElementById(id);
@@ -3041,26 +3041,13 @@ function dbOeffnen(){
   if(dbVerbindung) return Promise.resolve(dbVerbindung);
   return new Promise((res, rej) => {
     if(!window.indexedDB){ rej(new Error('Dieser Browser kann nichts dauerhaft ablegen')); return; }
-    const r = indexedDB.open(DB_NAME, 2);
-    r.onupgradeneeded = ev => {
+    const r = indexedDB.open(DB_NAME, 3);
+    r.onupgradeneeded = () => {
+      // Nur die Speicher anlegen. Der Umzug der Bytes läuft danach
+      // häppchenweise im Hintergrund — ein Buch je Schritt.
       const d = r.result;
       if(!d.objectStoreNames.contains(DB_STORE)) d.createObjectStore(DB_STORE, {keyPath:'id'});
       if(!d.objectStoreNames.contains(DB_DATEIEN)) d.createObjectStore(DB_DATEIEN, {keyPath:'id'});
-      if(ev.oldVersion < 2){
-        const tx = r.transaction;
-        const bs = tx.objectStore(DB_STORE), ds = tx.objectStore(DB_DATEIEN);
-        bs.openCursor().onsuccess = e => {
-          const c = e.target.result;
-          if(!c) return;
-          const v = c.value;
-          if(v && v.daten){
-            ds.put({ id: v.id, daten: v.daten });
-            delete v.daten;
-            c.update(v);
-          }
-          c.continue();
-        };
-      }
     };
     r.onsuccess = () => { dbVerbindung = r.result; res(dbVerbindung); };
     r.onerror = () => rej(r.error || new Error('Ablage nicht verfügbar'));
@@ -3140,10 +3127,46 @@ async function buchAblegen(file, daten, titel, seiten, woerter){
 }
 
 function buecherHolen(){
-  return dbTun('readonly', s => s.getAll()).then(r => {
-    const liste = Array.isArray(r) ? r : (r && r.result) || [];
-    return liste.sort((a,b) => (b.zuletzt||'').localeCompare(a.zuletzt||''));
-  }).catch(() => []);
+  return dbTun('readonly', s => {
+    const out = [];
+    s.openCursor().onsuccess = e => {
+      const c = e.target.result;
+      if(!c) return;
+      const v = c.value, leicht = {};
+      for(const k in v){ if(k !== 'daten') leicht[k] = v[k]; }
+      leicht._roh = !!v.daten;          // Bytes hängen noch am Eintrag -> nicht umgezogen
+      out.push(leicht);
+      c.continue();
+    };
+    return out;
+  }).then(liste => (Array.isArray(liste) ? liste : [])
+    .sort((a,b) => (b.zuletzt||'').localeCompare(a.zuletzt||''))
+  ).catch(() => []);
+}
+
+/* Umzug der PDF-Bytes: ein Buch je Transaktion, mit Pausen. Wird die App
+   dabei beendet, macht der nächste Start einfach beim nächsten Buch weiter. */
+let umzugLaeuft = false;
+async function dateienUmziehen(){
+  if(umzugLaeuft) return;
+  umzugLaeuft = true;
+  try{
+    const offen = (await buecherHolen()).filter(b => b._roh).map(b => b.id);
+    for(const id of offen){
+      try{
+        await dbTun('readwrite', (s, t) => {
+          s.get(id).onsuccess = e => {
+            const v = e.target.result;
+            if(!v || !v.daten) return;
+            t.objectStore(DB_DATEIEN).put({ id: id, daten: v.daten });
+            delete v.daten;
+            s.put(v);
+          };
+        }, [DB_STORE, DB_DATEIEN]);
+      }catch(e){}
+      await new Promise(r => setTimeout(r, 120));
+    }
+  }finally{ umzugLaeuft = false; }
 }
 
 async function libZaehlen(){
@@ -3155,9 +3178,11 @@ async function buchOeffnen(eintrag){
   el.sheet.hidden = true;
   try{
     await dbTun('readwrite', s => {
-      eintrag.zuletzt = new Date().toISOString();
-      delete eintrag.daten;
-      s.put(eintrag);
+      s.get(eintrag.id).onsuccess = e => {
+        const v = e.target.result; if(!v) return;
+        v.zuletzt = new Date().toISOString();
+        s.put(v);
+      };
     });
   }catch(e){}
   let daten = null;
@@ -3166,6 +3191,14 @@ async function buchOeffnen(eintrag){
     const rec = r && (r.result !== undefined ? r.result : r);
     daten = rec && rec.daten;
   }catch(e){}
+  if(!daten){
+    // noch nicht umgezogen — dann direkt vom alten Eintrag
+    try{
+      const r = await dbTun('readonly', s => s.get(eintrag.id));
+      const rec = r && (r.result !== undefined ? r.result : r);
+      daten = rec && rec.daten;
+    }catch(e){}
+  }
   if(!daten){
     stoerung('Die PDF zu diesem Buch fehlt im Speicher. Bitte einmal neu hinzufügen.');
     return;
@@ -3338,6 +3371,7 @@ $('bViele').onclick = () => el.file.click();
 el.bLib.onclick = zeigeBibliothek;
 dauerhaftSichern();
 libZaehlen();
+setTimeout(() => { dateienUmziehen().catch(() => {}); }, 2500);
 
 /* ══ Wörter nachschlagen ═════════════════════════════════ */
 const U_SPEICHER = 'vorleser.uebersetzen', VOK_SPEICHER = 'vorleser.vokabeln';
@@ -3914,6 +3948,7 @@ document.addEventListener('keydown', e => {
 
 window.addEventListener('beforeunload', () => { try{ synth.cancel(); }catch(e){} });
 ['pagehide','blur'].forEach(ev => window.addEventListener(ev, () => standSichern(true)));
+window.addEventListener('pagehide', () => { try{ synth.cancel(); }catch(e){} });
 document.addEventListener('visibilitychange', () => { if(document.hidden) standSichern(true); });
 
 /* ══ Als App auf dem Home-Bildschirm ═════════════════════ */
@@ -3925,6 +3960,9 @@ if('serviceWorker' in navigator && location.protocol === 'https:'){
       navigator.serviceWorker.addEventListener('controllerchange', () => {
         if(schonNeu) return;
         schonNeu = true;
+        // Nie mitten im Hören oder mit offenem Buch neu starten
+        if(typeof mode !== 'undefined' && (mode === 'playing' || mode === 'paused')) return;
+        if(typeof units !== 'undefined' && units.length) return;
         location.reload();
       });
     }).catch(()=>{});
