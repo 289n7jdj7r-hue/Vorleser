@@ -796,7 +796,7 @@
 (function(){
 "use strict";
 
-const APP_VERSION = 'v51';
+const APP_VERSION = 'v52';
 
 /* ══ Elemente ═══════════════════════════════════════════ */
 const $ = id => document.getElementById(id);
@@ -2469,7 +2469,7 @@ async function figurenHolen(s){
   if(figurenCache[key]) return figurenCache[key];
   const r = await fetch('https://api.jikan.moe/v4/' + (typ || 'anime') + '/' + id + '/characters');
   if(!r.ok) throw new Error(r.status === 429 ? 'Datenbank-Limit, gleich nochmal' : 'Datenbank HTTP ' + r.status);
-  const d = await r.json();
+  const d = await r.json().catch(() => { throw new Error('Datenbank antwortet nicht richtig'); });
   let liste = (d.data || []).filter(c => c.character && c.character.images
                                   && c.character.images.jpg && c.character.images.jpg.image_url
                                   && !/questionmark/i.test(c.character.images.jpg.image_url));

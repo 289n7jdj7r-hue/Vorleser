@@ -2,7 +2,7 @@
    Die App-Dateien kommen immer frisch vom Netz, wenn es eines gibt;
    der Zwischenspeicher dient nur als Rückfall ohne Verbindung.
    Deshalb reicht ab jetzt ein normales Neuladen für Updates. */
-const VERSION = 'vorleser-v51';
+const VERSION = 'vorleser-v52';
 const KERN = [
   './',
   './index.html',
@@ -39,6 +39,8 @@ self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
   const url = new URL(e.request.url);
   const eigen = url.origin === location.origin;
+  // Fremde Dienste (Bilder-Datenbank, Stimmen, Übersetzung) nie abfangen — nur pdf.js
+  if (!eigen && url.hostname !== 'cdnjs.cloudflare.com') return;
 
   // App-Dateien: Netz zuerst, Zwischenspeicher nur als Rückfall
   if (eigen && FRISCH.test(url.pathname)) {
@@ -63,7 +65,7 @@ self.addEventListener('fetch', e => {
       if (antwort.ok && eigen) { const c = await caches.open(VERSION); c.put(e.request, antwort.clone()); }
       return antwort;
     } catch (err) {
-      return caches.match('./index.html');
+      return eigen ? caches.match('./index.html') : Response.error();
     }
   })());
 });
