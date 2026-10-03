@@ -2,7 +2,7 @@
    Die App-Dateien kommen immer frisch vom Netz, wenn es eines gibt;
    der Zwischenspeicher dient nur als Rückfall ohne Verbindung.
    Deshalb reicht ab jetzt ein normales Neuladen für Updates. */
-const VERSION = 'vorleser-v47';
+const VERSION = 'vorleser-v48';
 const KERN = [
   './',
   './index.html',

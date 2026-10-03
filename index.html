@@ -395,7 +395,7 @@
       position:static;display:block;min-height:62dvh;overflow:visible;
       padding:14px 20px calc(90px + env(safe-area-inset-bottom));
     }
-    #startBild{width:min(180px,50vw) !important;margin-bottom:12px !important}
+    #startBild{width:min(140px,40vw) !important;margin-bottom:12px !important}
     .card h1{font-size:1.3rem;margin-bottom:8px}
     .card p{margin-bottom:14px}
     .eyebrow{margin-bottom:8px}
@@ -708,10 +708,10 @@
     <!-- Leerzustand -->
     <div class="center" id="empty">
       <div class="card">
-        <img id="startBild" alt="" hidden style="width:min(260px,70vw);aspect-ratio:1;object-fit:cover;
+        <img id="startBild" alt="" hidden style="width:min(200px,55vw);aspect-ratio:3/4;object-fit:cover;object-position:top;
              border-radius:18px;margin:0 auto 18px;display:block;box-shadow:0 10px 30px rgba(0,0,0,.18)">
         <p id="startBildQuelle" hidden style="margin:-10px 0 16px;font-family:var(--font-mono);font-size:9px;
-           letter-spacing:.1em;text-transform:uppercase;color:#A39C8B"></p>
+           letter-spacing:.06em;text-transform:none;color:#8A8371"></p>
         <p class="eyebrow">PDF hierher ziehen</p>
         <h1>Lass dir vorlesen,<br>was du sonst lesen müsstest.</h1>
         <p>Text wird direkt im Browser aus der PDF gelöst. Geladene Bücher bleiben dauerhaft im Gerät — auch ohne Internet.</p>
@@ -784,7 +784,7 @@
 (function(){
 "use strict";
 
-const APP_VERSION = 'v47';
+const APP_VERSION = 'v48';
 
 /* ══ Elemente ═══════════════════════════════════════════ */
 const $ = id => document.getElementById(id);
@@ -2430,23 +2430,47 @@ $('bTitelei').onclick = () => {
 };
 ueberspringeTitelei = true;   // Titelei wird immer übersprungen
 
-/* Startbild: bei jedem Öffnen ein anderes — nur jugendfreie Kategorien */
+/* Startbild: ein klassisches Charakterporträt aus deinen Serien,
+   bei jedem Öffnen ein anderes. Quelle: MyAnimeList-Datenbank. */
+const SERIEN = [
+  ['One Piece',21],['Bleach',269],['Jujutsu Kaisen',40748],['My Hero Academia',31964],
+  ['Monster',19],['Tokyo Ghoul',22319],['Tokyo Ghoul:re',36511],['Berserk',33],
+  ["JoJo's Bizarre Adventure",14719],['Vinland Saga',37521],['Fullmetal Alchemist: Brotherhood',5114],
+  ['Kingdom',12445],['Re:Zero',31240],['Kaguya-sama: Love is War',37999],['86',41457],
+  ['A Silent Voice',28851],['Spice and Wolf',2966],['Hunter x Hunter',11061],['Hajime no Ippo',263],
+  ['One Punch Man',30276],['Dorohedoro',38668],['Rascal Does Not Dream of Bunny Girl Senpai',37450],
+  ['Golden Kamuy',36028],['Chainsaw Man',44511],['Attack on Titan',16498],['Inuyasha',249],
+  ['Your Name',32281],['Dragon Ball',223],['Dragon Ball Z',813],['Spy x Family',50265],
+  ['Horimiya',42897],['The Fable',55828],['Gachiakuta',57892],
+  ['Vagabond',656,'manga'],['Usogui',2012,'manga'],['Bastard!!',1283,'manga'],
+  ['Kokou no Hito',1554,'manga'],['The Breaker',6216,'manga']
+];
+
 async function startBildLaden(){
   const img = $('startBild'), q = $('startBildQuelle');
   if(!img || !navigator.onLine) return;
-  const kat = ['neko','waifu','husbando','kitsune'][Math.floor(Math.random() * 4)];
-  try{
-    const r = await fetch('https://nekos.best/api/v2/' + kat, {cache:'no-store'});
-    if(!r.ok) return;
-    const d = await r.json();
-    const t = d.results && d.results[0];
-    if(!t || !t.url) return;
-    img.onload = () => {
-      img.hidden = false;
-      if(q && t.artist_name){ q.textContent = 'Bild: ' + t.artist_name; q.hidden = false; }
-    };
-    img.src = t.url;
-  }catch(e){}
+  const reihenfolge = SERIEN.slice().sort(() => Math.random() - 0.5);
+  for(const s of reihenfolge.slice(0, 5)){
+    const [name, id, typ] = s;
+    try{
+      const r = await fetch('https://api.jikan.moe/v4/' + (typ || 'anime') + '/' + id + '/characters');
+      if(!r.ok) continue;
+      const d = await r.json();
+      let liste = (d.data || []).filter(c => c.character && c.character.images
+                                      && c.character.images.jpg && c.character.images.jpg.image_url);
+      const haupt = liste.filter(c => /main/i.test(c.role || ''));
+      if(haupt.length) liste = haupt;
+      if(!liste.length) continue;
+      const c = liste[Math.floor(Math.random() * liste.length)];
+      img.onload = () => {
+        img.hidden = false;
+        if(q){ q.textContent = c.character.name + '  ·  ' + name; q.hidden = false; }
+      };
+      img.onerror = () => {};
+      img.src = c.character.images.jpg.image_url;
+      return;
+    }catch(e){ /* nächste Serie */ }
+  }
 }
 startBildLaden();
 $('bAnfang').onclick = zumTextanfang;
