@@ -803,7 +803,7 @@
 (function(){
 "use strict";
 
-const APP_VERSION = 'v55';
+const APP_VERSION = 'v56';
 
 /* ══ Elemente ═══════════════════════════════════════════ */
 const $ = id => document.getElementById(id);
@@ -2496,45 +2496,65 @@ const figurenCache = {};
 /* Startbilder: klassische Charakterporträts deiner Serien aus AniList
    (Jikan/MyAnimeList-Schnittstelle ist seit 1.10.2026 abgeschaltet).
    Ein Abruf für alle Serien, danach 30 Tage im Gerät gemerkt. */
-let bilderListe = null;
-const BILDER_KEY = 'vorleser.bilder.anilist';
+let bilderListe = null, bilderFehlen = {};
+const BILDER_KEY = 'vorleser.bilder.anilist2';
+function anilistTeil(s, k){
+  return 's' + k + ':Media(idMal:' + s[1] + ',type:' + ((s[2] || 'anime') === 'manga' ? 'MANGA' : 'ANIME') + ')'
+    + '{characters(sort:[ROLE,FAVOURITES_DESC],perPage:8){edges{role node{id name{full} image{large}}}}}';
+}
+async function anilistFrage(teil){
+  const ab = new AbortController(); const uhr = setTimeout(() => ab.abort(), 12000);
+  try{
+    const r = await fetch('https://graphql.anilist.co', { method:'POST', signal:ab.signal,
+      headers:{'Content-Type':'application/json','Accept':'application/json'},
+      body: JSON.stringify({ query:'{' + teil.map(anilistTeil).join(' ') + '}' }) });
+    const d = await r.json();
+    if(r.status === 429) throw new Error('AniList-Limit, gleich nochmal');
+    return d.data || null;
+  }catch(e){
+    throw new Error(e.name === 'AbortError' ? 'AniList antwortet nicht' : (e.message || 'AniList nicht erreichbar'));
+  }finally{ clearTimeout(uhr); }
+}
+function anilistAuswerten(s, m, liste){
+  if(!m || !m.characters) return false;
+  let kanten = m.characters.edges.filter(e => e.node && e.node.image && e.node.image.large
+                                           && !/default\.(jpg|png)/.test(e.node.image.large));
+  const haupt = kanten.filter(e => e.role === 'MAIN');
+  kanten = (haupt.length >= 3 ? haupt : kanten).slice(0, 6);
+  kanten.forEach(e => liste.push({ id:'a' + e.node.id, name:e.node.name.full, serie:s[0], url:e.node.image.large }));
+  return kanten.length > 0;
+}
 async function bilderListeHolen(){
   if(bilderListe) return bilderListe;
   try{
     const g = JSON.parse(localStorage.getItem(BILDER_KEY) || 'null');
-    if(g && g.liste && g.liste.length && Date.now() - g.wann < 30 * 864e5) return bilderListe = g.liste;
+    const frisch = g && Date.now() - g.wann < ((g.fehlen && Object.keys(g.fehlen).length) ? 864e5 : 30 * 864e5);
+    if(frisch && g.liste && g.liste.length){ bilderFehlen = g.fehlen || {}; return bilderListe = g.liste; }
   }catch(e){}
-  const liste = [];
+  const liste = [], fehlen = {};
   let letzterFehler = '';
+  const pause = ms => new Promise(r => setTimeout(r, ms));
   for(let start = 0; start < SERIEN.length; start += 8){
     const teil = SERIEN.slice(start, start + 8);
-    const query = '{' + teil.map((s, k) =>
-      's' + k + ':Media(idMal:' + s[1] + ',type:' + ((s[2] || 'anime') === 'manga' ? 'MANGA' : 'ANIME') + ')'
-      + '{characters(sort:[ROLE,FAVOURITES_DESC],perPage:8){edges{role node{id name{full} image{large}}}}}'
-    ).join(' ') + '}';
-    const ab = new AbortController(); const uhr = setTimeout(() => ab.abort(), 12000);
-    try{
-      const r = await fetch('https://graphql.anilist.co', { method:'POST', signal:ab.signal,
-        headers:{'Content-Type':'application/json','Accept':'application/json'},
-        body: JSON.stringify({query}) });
-      const d = await r.json();                 // auch bei 404 kommen Teildaten
-      if(!d.data){ letzterFehler = 'AniList HTTP ' + r.status; continue; }
-      teil.forEach((s, k) => {
-        const m = d.data['s' + k];
-        if(!m || !m.characters) return;
-        let kanten = m.characters.edges.filter(e => e.node && e.node.image && e.node.image.large
-                                                 && !/default\.(jpg|png)/.test(e.node.image.large));
-        const haupt = kanten.filter(e => e.role === 'MAIN');
-        kanten = (haupt.length >= 3 ? haupt : kanten).slice(0, 6);
-        kanten.forEach(e => liste.push({ id:'a' + e.node.id, name:e.node.name.full,
-                                         serie:s[0], url:e.node.image.large }));
-      });
-    }catch(e){ letzterFehler = e.name === 'AbortError' ? 'AniList antwortet nicht' : 'AniList nicht erreichbar'; }
-    finally{ clearTimeout(uhr); }
-    await new Promise(r => setTimeout(r, 800));
+    let d = null;
+    try{ d = await anilistFrage(teil); }catch(e){ letzterFehler = e.message; }
+    if(d){
+      teil.forEach((s, k) => { if(!anilistAuswerten(s, d['s' + k], liste)) fehlen[s[0]] = 'nicht gefunden'; });
+    } else {
+      // Paket abgelehnt — jede Serie einzeln, damit eine falsche Kennung nicht alle mitreißt
+      for(const s of teil){
+        await pause(1200);
+        try{
+          const e1 = await anilistFrage([s]);
+          if(!anilistAuswerten(s, e1 && e1.s0, liste)) fehlen[s[0]] = 'in AniList nicht gefunden';
+        }catch(e){ fehlen[s[0]] = e.message; }
+      }
+    }
+    await pause(800);
   }
   if(!liste.length) throw new Error(letzterFehler || 'keine Bilder gefunden');
-  try{ localStorage.setItem(BILDER_KEY, JSON.stringify({ wann:Date.now(), liste })); }catch(e){}
+  bilderFehlen = fehlen;
+  try{ localStorage.setItem(BILDER_KEY, JSON.stringify({ wann:Date.now(), liste, fehlen })); }catch(e){}
   return bilderListe = liste;
 }
 async function figurenHolen(s){
@@ -2575,7 +2595,7 @@ async function zeigeGalerie(){
     try{
       const liste = await figurenHolen(s);
       grid.textContent = '';
-      if(!liste.length){ grid.textContent = 'keine Bilder'; continue; }
+      if(!liste.length){ grid.textContent = 'keine Bilder' + (bilderFehlen[name] ? ' — ' + bilderFehlen[name] : ''); continue; }
       liste.forEach(c => {
         const f = document.createElement('figure');
         const cid = String(c.character.mal_id);
