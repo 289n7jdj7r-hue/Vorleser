@@ -803,7 +803,7 @@
 (function(){
 "use strict";
 
-const APP_VERSION = 'v53';
+const APP_VERSION = 'v55';
 
 /* ══ Elemente ═══════════════════════════════════════════ */
 const $ = id => document.getElementById(id);
@@ -2493,30 +2493,54 @@ try{ bilderAus = Object.assign(bilderAus, JSON.parse(localStorage.getItem('vorle
 function bilderAusSichern(){ try{ localStorage.setItem('vorleser.bilder.aus', JSON.stringify(bilderAus)); }catch(e){} }
 
 const figurenCache = {};
-async function figurenHolen(s){
-  const [name, id, typ] = s;
-  const key = (typ || 'anime') + id;
-  if(figurenCache[key]) return figurenCache[key];
+/* Startbilder: klassische Charakterporträts deiner Serien aus AniList
+   (Jikan/MyAnimeList-Schnittstelle ist seit 1.10.2026 abgeschaltet).
+   Ein Abruf für alle Serien, danach 30 Tage im Gerät gemerkt. */
+let bilderListe = null;
+const BILDER_KEY = 'vorleser.bilder.anilist';
+async function bilderListeHolen(){
+  if(bilderListe) return bilderListe;
   try{
-    const gemerkt = JSON.parse(localStorage.getItem('vorleser.figuren.' + key) || 'null');
-    if(gemerkt && gemerkt.length) return figurenCache[key] = gemerkt;
+    const g = JSON.parse(localStorage.getItem(BILDER_KEY) || 'null');
+    if(g && g.liste && g.liste.length && Date.now() - g.wann < 30 * 864e5) return bilderListe = g.liste;
   }catch(e){}
-  const ab = new AbortController(); const uhr = setTimeout(() => ab.abort(), 8000);
-  let r;
-  try{ r = await fetch('https://api.jikan.moe/v4/' + (typ || 'anime') + '/' + id + '/characters', {signal:ab.signal}); }
-  catch(e){ throw new Error(e.name === 'AbortError' ? 'Datenbank antwortet nicht' : 'Datenbank nicht erreichbar'); }
-  finally{ clearTimeout(uhr); }
-  if(!r.ok) throw new Error(r.status === 429 ? 'Datenbank-Limit, gleich nochmal' : 'Datenbank HTTP ' + r.status);
-  const d = await r.json().catch(() => { throw new Error('Datenbank antwortet nicht richtig'); });
-  let liste = (d.data || []).filter(c => c.character && c.character.images
-                                  && c.character.images.jpg && c.character.images.jpg.image_url
-                                  && !/questionmark/i.test(c.character.images.jpg.image_url));
-  const haupt = liste.filter(c => /main/i.test(c.role || ''));
-  if(haupt.length) liste = haupt;
-  liste = liste.map(c => ({ role:c.role, character:{ mal_id:c.character.mal_id, name:c.character.name,
-            images:{ jpg:{ image_url:c.character.images.jpg.image_url } } } }));
-  try{ localStorage.setItem('vorleser.figuren.' + key, JSON.stringify(liste)); }catch(e){}
-  return figurenCache[key] = liste;
+  const liste = [];
+  let letzterFehler = '';
+  for(let start = 0; start < SERIEN.length; start += 8){
+    const teil = SERIEN.slice(start, start + 8);
+    const query = '{' + teil.map((s, k) =>
+      's' + k + ':Media(idMal:' + s[1] + ',type:' + ((s[2] || 'anime') === 'manga' ? 'MANGA' : 'ANIME') + ')'
+      + '{characters(sort:[ROLE,FAVOURITES_DESC],perPage:8){edges{role node{id name{full} image{large}}}}}'
+    ).join(' ') + '}';
+    const ab = new AbortController(); const uhr = setTimeout(() => ab.abort(), 12000);
+    try{
+      const r = await fetch('https://graphql.anilist.co', { method:'POST', signal:ab.signal,
+        headers:{'Content-Type':'application/json','Accept':'application/json'},
+        body: JSON.stringify({query}) });
+      const d = await r.json();                 // auch bei 404 kommen Teildaten
+      if(!d.data){ letzterFehler = 'AniList HTTP ' + r.status; continue; }
+      teil.forEach((s, k) => {
+        const m = d.data['s' + k];
+        if(!m || !m.characters) return;
+        let kanten = m.characters.edges.filter(e => e.node && e.node.image && e.node.image.large
+                                                 && !/default\.(jpg|png)/.test(e.node.image.large));
+        const haupt = kanten.filter(e => e.role === 'MAIN');
+        kanten = (haupt.length >= 3 ? haupt : kanten).slice(0, 6);
+        kanten.forEach(e => liste.push({ id:'a' + e.node.id, name:e.node.name.full,
+                                         serie:s[0], url:e.node.image.large }));
+      });
+    }catch(e){ letzterFehler = e.name === 'AbortError' ? 'AniList antwortet nicht' : 'AniList nicht erreichbar'; }
+    finally{ clearTimeout(uhr); }
+    await new Promise(r => setTimeout(r, 800));
+  }
+  if(!liste.length) throw new Error(letzterFehler || 'keine Bilder gefunden');
+  try{ localStorage.setItem(BILDER_KEY, JSON.stringify({ wann:Date.now(), liste })); }catch(e){}
+  return bilderListe = liste;
+}
+async function figurenHolen(s){
+  const name = s[0];
+  return (await bilderListeHolen()).filter(x => x.serie === name).map(x => ({
+    character:{ mal_id:x.id, name:x.name, images:{ jpg:{ image_url:x.url } } } }));
 }
 
 async function zeigeGalerie(){
@@ -2526,7 +2550,7 @@ async function zeigeGalerie(){
   el.sheet.hidden = false;
   const hinweis = document.createElement('p');
   hinweis.style.cssText = 'margin:12px 0 4px;font-size:13px;color:#6B7280;line-height:1.5';
-  hinweis.textContent = 'Antippen schließt ein Bild aus, der Serienknopf eine ganze Serie. Lädt der Reihe nach — bitte kurz warten.';
+  hinweis.textContent = 'Antippen schließt ein Bild aus, der Serienknopf eine ganze Serie. Alle Bilder liegen im Gerät, nur deine Serien.';
   el.sheetList.appendChild(hinweis);
 
   for(const s of SERIEN){
@@ -2551,7 +2575,7 @@ async function zeigeGalerie(){
     try{
       const liste = await figurenHolen(s);
       grid.textContent = '';
-      if(!liste.length){ grid.textContent = 'keine Bilder in der Datenbank'; continue; }
+      if(!liste.length){ grid.textContent = 'keine Bilder'; continue; }
       liste.forEach(c => {
         const f = document.createElement('figure');
         const cid = String(c.character.mal_id);
@@ -2566,7 +2590,6 @@ async function zeigeGalerie(){
         grid.appendChild(f);
       });
     }catch(e){ grid.textContent = 'nicht erreichbar (' + (e.message || e) + ')'; }
-    await new Promise(r => setTimeout(r, 450));   // Datenbank erlaubt ~3 Abfragen je Sekunde
     if(el.sheet.hidden) return;                    // Fenster zu — aufhören
   }
 }
@@ -2584,42 +2607,23 @@ let startBildAktuell = null;
 async function startBildLaden(){
   const img = $('startBild'), q = $('startBildQuelle');
   if(!img || !q) return;
-  if(!navigator.onLine){ q.textContent = 'Startbild: offline'; q.hidden = false; return; }
   q.textContent = 'Startbild wird geladen …'; q.hidden = false;
-  bilderAus.fremd = bilderAus.fremd || {};
-  // 1. Deine Serien (MyAnimeList)
-  const reihenfolge = SERIEN.filter(s => !bilderAus.serien[s[0]]).sort(() => Math.random() - 0.5);
-  for(const s of reihenfolge.slice(0, 3)){
-    const [name] = s;
+  let alle;
+  try{ alle = await bilderListeHolen(); }
+  catch(e){ q.textContent = 'Kein Startbild — ' + e.message; return; }
+  const frei = alle.filter(x => !bilderAus.serien[x.serie] && !bilderAus.figuren[String(x.id)]);
+  if(!frei.length){ q.textContent = 'Kein Startbild — alles ausgefiltert'; return; }
+  for(let n = 0; n < 3; n++){
+    const x = frei[Math.floor(Math.random() * frei.length)];
     try{
-      const liste = (await figurenHolen(s)).filter(c => !bilderAus.figuren[String(c.character.mal_id)]);
-      if(!liste.length) continue;
-      const c = liste[Math.floor(Math.random() * liste.length)];
-      await bildZeigen(img, c.character.images.jpg.image_url);
-      img.hidden = false;
-      startBildAktuell = { art:'figur', id:String(c.character.mal_id) };
-      q.textContent = c.character.name + '  ·  ' + name + '  ·  Bild antippen = nie wieder zeigen';
-      return;
-    }catch(e){ if(/nicht erreichbar|antwortet nicht/.test(e.message)) break; }
-  }
-  // 2. Rückfall: Bilder wie in v47
-  for(let n = 0; n < 4; n++){
-    try{
-      const kat = ['husbando','waifu','neko','kitsune'][Math.floor(Math.random() * 4)];
-      const r = await fetch('https://nekos.best/api/v2/' + kat + '?amount=10');
-      if(!r.ok) throw new Error('HTTP ' + r.status);
-      const d = await r.json();
-      const frei = (d.results || []).filter(x => x.url && !bilderAus.fremd[x.url]);
-      if(!frei.length) continue;
-      const x = frei[Math.floor(Math.random() * frei.length)];
       await bildZeigen(img, x.url);
       img.hidden = false;
-      startBildAktuell = { art:'fremd', id:x.url };
-      q.textContent = (x.artist_name ? 'Bild: ' + x.artist_name + '  ·  ' : '') + 'Bild antippen = nie wieder zeigen';
+      startBildAktuell = { art:'figur', id:String(x.id) };
+      q.textContent = x.name + '  ·  ' + x.serie + '  ·  Bild antippen = nie wieder zeigen';
       return;
-    }catch(e){ if(n === 3) q.textContent = 'Kein Startbild — ' + (e.message || e); }
+    }catch(e){}
   }
-  if(q.textContent.startsWith('Startbild wird')) q.textContent = 'Kein Startbild — alles ausgefiltert';
+  q.textContent = 'Kein Startbild — Bilder nicht ladbar';
 }
 $('startBild').onclick = () => {
   const a = startBildAktuell;
