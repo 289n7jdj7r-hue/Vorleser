@@ -297,6 +297,7 @@
     border-radius:6px;border:1px solid #DCD8CF;background:#fff}
 
   .abs{color:var(--ink-soft);opacity:.82;cursor:pointer;transition:opacity .2s}
+  .abs{content-visibility:auto;contain-intrinsic-size:auto 6em}
   .abs.done{opacity:.45}
   .abs:hover{opacity:1}
   .sent{
@@ -534,6 +535,8 @@
       <div class="field">
         <label>Tempo</label>
         <div class="chips">
+          <button class="chip chip--num" data-tempo="0.9" aria-pressed="false">0,9×</button>
+          <button class="chip chip--num" data-tempo="0.95" aria-pressed="false">0,95×</button>
           <button class="chip chip--num" data-tempo="1" aria-pressed="true">1×</button>
           <button class="chip chip--num" data-tempo="1.25" aria-pressed="false">1,25×</button>
           <button class="chip chip--num" data-tempo="1.5" aria-pressed="false">1,5×</button>
@@ -576,6 +579,10 @@
       <div class="field">
         <label>Nach 30 Minuten</label>
         <button class="ghost" id="bSchlaf" aria-pressed="false">Schlafmodus</button>
+      </div>
+      <div class="field">
+        <label>Lautstärke</label>
+        <button class="ghost" id="bLauter" aria-pressed="false">Lauter</button>
       </div>
       <div class="field">
         <label>Aussprache</label>
@@ -796,7 +803,7 @@
 (function(){
 "use strict";
 
-const APP_VERSION = 'v52';
+const APP_VERSION = 'v53';
 
 /* ══ Elemente ═══════════════════════════════════════════ */
 const $ = id => document.getElementById(id);
@@ -843,7 +850,7 @@ let gen = 0;             // Generationszähler gegen verwaiste Rückrufe
 let voices = [];
 let follow = true, expand = true;
 let lang = 'de';              // 'de' oder 'en'
-let tempo = 1;                // 1 | 1.25 | 1.5
+let tempo = 1;                // 0.9 | 0.95 | 1 | 1.25 | 1.5
 let slot = {de:[null,null], en:[null,null]};   // je zwei Stimmen
 let aktiv = 0;                // 0 = Stimme A, 1 = Stimme B
 let marken = [];              // gemerkte Sätze
@@ -1516,7 +1523,9 @@ function paint(){
       const alt = absaetze[aktAbsatz];
       alt.el.textContent = alt.texte.join(' ');
     }
-    absaetze.forEach((x,k) => x.el.classList.toggle('done', k < nr));
+    const lo = Math.max(0, Math.min(aktAbsatz, nr)), hi = Math.max(aktAbsatz, nr);
+    if(aktAbsatz < 0) absaetze.forEach((x,k) => { if(k < nr) x.el.classList.add('done'); });
+    else for(let k = lo; k <= hi && k < absaetze.length; k++) absaetze[k].el.classList.toggle('done', k < nr);
     aktAbsatz = nr;
   }
 
@@ -1764,6 +1773,8 @@ function zeigeVerbrauch(){
   el.sheetList.appendChild(tarif);
 }
 
+let lauterAn = false, lauterOhneGain = false;
+try{ lauterAn = localStorage.getItem('vorleser.lauter') === '1'; }catch(e){}
 async function wolkeSprich(text){
   const d = wolke.dienst;
   if(grenzeErreicht(d, text.length)){
@@ -1779,7 +1790,9 @@ async function wolkeSprichRoh(text){
   const d = wolke.dienst;
   if(d === 'azure'){
     const ssml = '<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="'
-      + locale() + '"><voice name="' + wolke.stimme + '">' + xmlEsc(text) + '</voice></speak>';
+      + locale() + '"><voice name="' + wolke.stimme + '">'
+      + (lauterAn ? '<prosody volume="+6dB">' + xmlEsc(text) + '</prosody>' : xmlEsc(text))
+      + '</voice></speak>';
     const r = await fetch('https://' + wolke.region + '.tts.speech.microsoft.com/cognitiveservices/v1', {
       method:'POST',
       headers:{'Ocp-Apim-Subscription-Key':wolke.key, 'Content-Type':'application/ssml+xml',
@@ -1798,7 +1811,14 @@ async function wolkeSprichRoh(text){
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ input:{text:text},
         voice:{languageCode:locale(), name:wolke.stimme},
-        audioConfig:{audioEncoding:'MP3'} }) });
+        audioConfig: lauterAn && !lauterOhneGain
+          ? {audioEncoding:'MP3', volumeGainDb:6, effectsProfileId:['headphone-class-device']}
+          : {audioEncoding:'MP3'} }) });
+    if(!r.ok && r.status === 400 && lauterAn && !lauterOhneGain){
+      // Stimme kann keine Lautstärke-Anhebung — ohne wiederholen
+      lauterOhneGain = true;
+      return wolkeSprichRoh(text);
+    }
     if(!r.ok){
       let grund = '';
       try{ grund = (await r.text()).slice(0, 300); }catch(e){}
@@ -2086,6 +2106,16 @@ setInterval(() => {
 }, 1000);
 
 $('bSchlaf').onclick = () => schlafUmschalten(!schlafAn);
+$('bLauter').setAttribute('aria-pressed', String(lauterAn));
+$('bLauter').onclick = () => {
+  lauterAn = !lauterAn;
+  try{ localStorage.setItem('vorleser.lauter', lauterAn ? '1' : '0'); }catch(e){}
+  $('bLauter').setAttribute('aria-pressed', String(lauterAn));
+  // vorgeladene Sätze verwerfen, damit der nächste schon in neuer Lautstärke kommt
+  wolke.cache.forEach((u, i) => { if(i !== idx) URL.revokeObjectURL(u); });
+  [...wolke.cache.keys()].forEach(i => { if(i !== idx) wolke.cache.delete(i); });
+  melde(lauterAn ? 'Lauter an — gilt ab dem nächsten Satz' : 'Lauter aus');
+};
 try{
   if(localStorage.getItem('vorleser.schlaf') === '1'){
     schlafAn = true;
@@ -2467,7 +2497,15 @@ async function figurenHolen(s){
   const [name, id, typ] = s;
   const key = (typ || 'anime') + id;
   if(figurenCache[key]) return figurenCache[key];
-  const r = await fetch('https://api.jikan.moe/v4/' + (typ || 'anime') + '/' + id + '/characters');
+  try{
+    const gemerkt = JSON.parse(localStorage.getItem('vorleser.figuren.' + key) || 'null');
+    if(gemerkt && gemerkt.length) return figurenCache[key] = gemerkt;
+  }catch(e){}
+  const ab = new AbortController(); const uhr = setTimeout(() => ab.abort(), 8000);
+  let r;
+  try{ r = await fetch('https://api.jikan.moe/v4/' + (typ || 'anime') + '/' + id + '/characters', {signal:ab.signal}); }
+  catch(e){ throw new Error(e.name === 'AbortError' ? 'Datenbank antwortet nicht' : 'Datenbank nicht erreichbar'); }
+  finally{ clearTimeout(uhr); }
   if(!r.ok) throw new Error(r.status === 429 ? 'Datenbank-Limit, gleich nochmal' : 'Datenbank HTTP ' + r.status);
   const d = await r.json().catch(() => { throw new Error('Datenbank antwortet nicht richtig'); });
   let liste = (d.data || []).filter(c => c.character && c.character.images
@@ -2475,6 +2513,9 @@ async function figurenHolen(s){
                                   && !/questionmark/i.test(c.character.images.jpg.image_url));
   const haupt = liste.filter(c => /main/i.test(c.role || ''));
   if(haupt.length) liste = haupt;
+  liste = liste.map(c => ({ role:c.role, character:{ mal_id:c.character.mal_id, name:c.character.name,
+            images:{ jpg:{ image_url:c.character.images.jpg.image_url } } } }));
+  try{ localStorage.setItem('vorleser.figuren.' + key, JSON.stringify(liste)); }catch(e){}
   return figurenCache[key] = liste;
 }
 
@@ -2531,32 +2572,65 @@ async function zeigeGalerie(){
 }
 $('bGalerie').onclick = zeigeGalerie;
 
+function bildZeigen(img, url){
+  return new Promise((ok, nein) => {
+    const uhr = setTimeout(() => nein(new Error('Bild lädt zu lange')), 10000);
+    img.onload = () => { clearTimeout(uhr); ok(); };
+    img.onerror = () => { clearTimeout(uhr); nein(new Error('Bild nicht ladbar')); };
+    img.src = url;
+  });
+}
+let startBildAktuell = null;
 async function startBildLaden(){
   const img = $('startBild'), q = $('startBildQuelle');
   if(!img || !q) return;
   if(!navigator.onLine){ q.textContent = 'Startbild: offline'; q.hidden = false; return; }
   q.textContent = 'Startbild wird geladen …'; q.hidden = false;
+  bilderAus.fremd = bilderAus.fremd || {};
+  // 1. Deine Serien (MyAnimeList)
   const reihenfolge = SERIEN.filter(s => !bilderAus.serien[s[0]]).sort(() => Math.random() - 0.5);
-  const gruende = [];
-  for(const s of reihenfolge.slice(0, 5)){
+  for(const s of reihenfolge.slice(0, 3)){
     const [name] = s;
     try{
       const liste = (await figurenHolen(s)).filter(c => !bilderAus.figuren[String(c.character.mal_id)]);
-      if(!liste.length){ gruende.push(name + ': keine Bilder'); continue; }
+      if(!liste.length) continue;
       const c = liste[Math.floor(Math.random() * liste.length)];
-      await new Promise((ok, nein) => {
-        img.onload = ok;
-        img.onerror = () => nein(new Error('Bild nicht ladbar'));
-        img.src = c.character.images.jpg.image_url;
-      });
+      await bildZeigen(img, c.character.images.jpg.image_url);
       img.hidden = false;
-      q.textContent = c.character.name + '  ·  ' + name;
+      startBildAktuell = { art:'figur', id:String(c.character.mal_id) };
+      q.textContent = c.character.name + '  ·  ' + name + '  ·  Bild antippen = nie wieder zeigen';
       return;
-    }catch(e){ gruende.push(name + ': ' + (e.message || e)); }
+    }catch(e){ if(/nicht erreichbar|antwortet nicht/.test(e.message)) break; }
   }
-  q.textContent = 'Kein Startbild — ' + (gruende[0] || 'Datenbank nicht erreichbar');
+  // 2. Rückfall: Bilder wie in v47
+  for(let n = 0; n < 4; n++){
+    try{
+      const kat = ['husbando','waifu','neko','kitsune'][Math.floor(Math.random() * 4)];
+      const r = await fetch('https://nekos.best/api/v2/' + kat + '?amount=10');
+      if(!r.ok) throw new Error('HTTP ' + r.status);
+      const d = await r.json();
+      const frei = (d.results || []).filter(x => x.url && !bilderAus.fremd[x.url]);
+      if(!frei.length) continue;
+      const x = frei[Math.floor(Math.random() * frei.length)];
+      await bildZeigen(img, x.url);
+      img.hidden = false;
+      startBildAktuell = { art:'fremd', id:x.url };
+      q.textContent = (x.artist_name ? 'Bild: ' + x.artist_name + '  ·  ' : '') + 'Bild antippen = nie wieder zeigen';
+      return;
+    }catch(e){ if(n === 3) q.textContent = 'Kein Startbild — ' + (e.message || e); }
+  }
+  if(q.textContent.startsWith('Startbild wird')) q.textContent = 'Kein Startbild — alles ausgefiltert';
 }
-$('startBild').onclick = () => { $('startBild').hidden = true; startBildLaden(); };
+$('startBild').onclick = () => {
+  const a = startBildAktuell;
+  if(a){
+    if(a.art === 'figur') bilderAus.figuren[a.id] = true;
+    else { bilderAus.fremd = bilderAus.fremd || {}; bilderAus.fremd[a.id] = true; }
+    bilderAusSichern();
+    melde('Bild ausgefiltert');
+  }
+  $('startBild').hidden = true; startBildLaden();
+};
 $('startBildQuelle').onclick = () => startBildLaden();
 startBildLaden();
 $('bAnfang').onclick = zumTextanfang;
@@ -3958,6 +4032,23 @@ window.addEventListener('beforeunload', () => { try{ synth.cancel(); }catch(e){}
 window.addEventListener('pagehide', () => { try{ synth.cancel(); }catch(e){} });
 document.addEventListener('visibilitychange', () => { if(document.hidden) standSichern(true); });
 
+/* ══ Nur eine Instanz spricht ════════════════════════════
+   iOS lässt beim Wiederöffnen manchmal die alte Seite im Hintergrund
+   weiterlaufen. Die neue meldet sich, die alte hält an und sichert. */
+try{
+  const kanal = new BroadcastChannel('vorleser-instanz');
+  const ich = Math.random().toString(36).slice(2);
+  kanal.onmessage = e => {
+    if(!e.data || e.data.von === ich || e.data.typ !== 'neu') return;
+    try{ audio.pause(); }catch(x){}
+    try{ synth.cancel(); }catch(x){}
+    standSichern(true);
+    if(typeof mode !== 'undefined' && mode !== 'idle'){ try{ stop(); }catch(x){} }
+    kanal.postMessage({typ:'gestoppt', von:ich});
+  };
+  kanal.postMessage({typ:'neu', von:ich});
+}catch(e){}
+
 /* ══ Als App auf dem Home-Bildschirm ═════════════════════ */
 if('serviceWorker' in navigator && location.protocol === 'https:'){
   window.addEventListener('load', () => {
@@ -4002,6 +4093,7 @@ function sperrbildschirm(){
       artist: u ? 'Seite ' + u.page : '',
       album: 'Vorleser'
     });
+    if(!sperrbildschirm.fertig){ sperrbildschirm.fertig = true;
     navigator.mediaSession.setActionHandler('play', () => {
       if(mode === 'paused') resume(); else if(mode === 'idle') play(idx);
     });
@@ -4011,6 +4103,7 @@ function sperrbildschirm(){
     navigator.mediaSession.setActionHandler('previoustrack', () => jump(idx - 1, mode === 'playing'));
     navigator.mediaSession.setActionHandler('seekforward', () => jump(idx + 1, mode === 'playing'));
     navigator.mediaSession.setActionHandler('seekbackward', () => jump(idx - 1, mode === 'playing'));
+    }
     navigator.mediaSession.playbackState =
       mode === 'playing' ? 'playing' : mode === 'paused' ? 'paused' : 'none';
   }catch(e){}
