@@ -803,7 +803,7 @@
 (function(){
 "use strict";
 
-const APP_VERSION = 'v56';
+const APP_VERSION = 'v57';
 
 /* ══ Elemente ═══════════════════════════════════════════ */
 const $ = id => document.getElementById(id);
@@ -2478,7 +2478,7 @@ const SERIEN = [
   ['One Piece',21],['Bleach',269],['Jujutsu Kaisen',40748],['My Hero Academia',31964],
   ['Monster',19],['Tokyo Ghoul',22319],['Tokyo Ghoul:re',36511],['Berserk',33],
   ["JoJo's Bizarre Adventure",14719],['Vinland Saga',37521],['Fullmetal Alchemist: Brotherhood',5114],
-  ['Kingdom',12445],['Re:Zero',31240],['Kaguya-sama: Love is War',37999],['86',41457],
+  ['Kingdom',0,'manga','search:"Kingdom",startDate_greater:20060000,startDate_lesser:20061232,countryOfOrigin:"JP"'],['Re:Zero',31240],['Kaguya-sama: Love is War',37999],['86',41457],
   ['A Silent Voice',28851],['Spice and Wolf',2966],['Hunter x Hunter',11061],['Hajime no Ippo',263],
   ['One Punch Man',30276],['Dorohedoro',38668],['Rascal Does Not Dream of Bunny Girl Senpai',37450],
   ['Golden Kamuy',36028],['Chainsaw Man',44511],['Attack on Titan',16498],['Inuyasha',249],
@@ -2497,10 +2497,12 @@ const figurenCache = {};
    (Jikan/MyAnimeList-Schnittstelle ist seit 1.10.2026 abgeschaltet).
    Ein Abruf für alle Serien, danach 30 Tage im Gerät gemerkt. */
 let bilderListe = null, bilderFehlen = {};
-const BILDER_KEY = 'vorleser.bilder.anilist2';
+const BILDER_KEY = 'vorleser.bilder.anilist3';
 function anilistTeil(s, k){
-  return 's' + k + ':Media(idMal:' + s[1] + ',type:' + ((s[2] || 'anime') === 'manga' ? 'MANGA' : 'ANIME') + ')'
-    + '{characters(sort:[ROLE,FAVOURITES_DESC],perPage:8){edges{role node{id name{full} image{large}}}}}';
+  const art = 'type:' + ((s[2] || 'anime') === 'manga' ? 'MANGA' : 'ANIME');
+  return 's' + k + ':Media(' + (s[3] ? s[3] : 'idMal:' + s[1]) + ',' + art + ')'
+    + '{characters(sort:[' + (s[3] ? 'FAVOURITES_DESC' : 'ROLE,FAVOURITES_DESC') + '],perPage:8)'
+    + '{edges{role node{id name{full} image{large}}}}}';
 }
 async function anilistFrage(teil){
   const ab = new AbortController(); const uhr = setTimeout(() => ab.abort(), 12000);
@@ -2520,7 +2522,7 @@ function anilistAuswerten(s, m, liste){
   let kanten = m.characters.edges.filter(e => e.node && e.node.image && e.node.image.large
                                            && !/default\.(jpg|png)/.test(e.node.image.large));
   const haupt = kanten.filter(e => e.role === 'MAIN');
-  kanten = (haupt.length >= 3 ? haupt : kanten).slice(0, 6);
+  kanten = s[3] ? kanten.slice(0, 8) : (haupt.length >= 3 ? haupt : kanten).slice(0, 6);
   kanten.forEach(e => liste.push({ id:'a' + e.node.id, name:e.node.name.full, serie:s[0], url:e.node.image.large }));
   return kanten.length > 0;
 }
