@@ -803,7 +803,7 @@
 (function(){
 "use strict";
 
-const APP_VERSION = 'v57';
+const APP_VERSION = 'v58';
 
 /* ══ Elemente ═══════════════════════════════════════════ */
 const $ = id => document.getElementById(id);
@@ -2565,6 +2565,120 @@ async function figurenHolen(s){
     character:{ mal_id:x.id, name:x.name, images:{ jpg:{ image_url:x.url } } } }));
 }
 
+/* ══ Eigene Kollektionen ═══════════════════════════════════
+   Eigene Bilder liegen in einer separaten Datenbank (die Bücher bleiben unberührt),
+   verkleinert auf max. 1000 px. */
+const EIGEN_DB = 'vorleser-eigene-bilder';
+function eigenDb(){
+  return new Promise((ok, nein) => {
+    const r = indexedDB.open(EIGEN_DB, 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('bilder', { keyPath:'id' });
+    r.onsuccess = () => ok(r.result);
+    r.onerror = () => nein(r.error);
+  });
+}
+async function eigenTun(modus, fn){
+  const db = await eigenDb();
+  return new Promise((ok, nein) => {
+    const t = db.transaction('bilder', modus);
+    const erg = fn(t.objectStore('bilder'));
+    t.oncomplete = () => { db.close(); ok(erg && erg.result); };
+    t.onerror = () => { db.close(); nein(t.error); };
+  });
+}
+const eigenUrls = {};
+async function eigeneHolen(){
+  let alle = [];
+  try{ alle = await eigenTun('readonly', s => s.getAll()) || []; }catch(e){}
+  return alle.map(x => {
+    if(!eigenUrls[x.id]) eigenUrls[x.id] = URL.createObjectURL(x.blob);
+    return { id:'e' + x.id, roh:x.id, name:x.kollektion, serie:'eigen:' + x.kollektion,
+             kollektion:x.kollektion, url:eigenUrls[x.id] };
+  });
+}
+function verkleinern(datei){
+  return new Promise((ok, nein) => {
+    const u = URL.createObjectURL(datei), bild = new Image();
+    bild.onload = () => {
+      const f = Math.min(1, 1000 / Math.max(bild.width, bild.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(bild.width * f); c.height = Math.round(bild.height * f);
+      c.getContext('2d').drawImage(bild, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(u);
+      c.toBlob(b => b ? ok(b) : nein(new Error('Bild nicht lesbar')), 'image/jpeg', 0.85);
+    };
+    bild.onerror = () => { URL.revokeObjectURL(u); nein(new Error('Bild nicht lesbar')); };
+    bild.src = u;
+  });
+}
+function eigeneHinzufuegen(fertig){
+  const name = (prompt('Name der Kollektion (z. B. „Berserk Panels"):', 'Meine Bilder') || '').trim();
+  if(!name) return;
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'image/*'; inp.multiple = true;
+  inp.onchange = async () => {
+    let n = 0;
+    for(const d of inp.files){
+      try{
+        const blob = await verkleinern(d);
+        const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        await eigenTun('readwrite', s => s.put({ id, kollektion:name, blob }));
+        n++;
+      }catch(e){}
+    }
+    melde(n + ' Bild' + (n === 1 ? '' : 'er') + ' in „' + name + '" gespeichert');
+    if(fertig) fertig();
+  };
+  inp.click();
+}
+async function eigeneAbschnitt(ziel){
+  const box = document.createElement('div'); box.className = 'book';
+  const kopf = document.createElement('div'); kopf.className = 'galerie-kopf';
+  const h3 = document.createElement('h3'); h3.textContent = 'Eigene Kollektionen';
+  const plus = document.createElement('button'); plus.className = 'dunkel'; plus.textContent = '+ Bilder hinzufügen';
+  kopf.appendChild(h3); kopf.appendChild(plus); box.appendChild(kopf);
+  ziel.appendChild(box);
+  const inhalt = document.createElement('div'); box.appendChild(inhalt);
+  const zeichnen = async () => {
+    inhalt.innerHTML = '';
+    const alle = await eigeneHolen();
+    if(!alle.length){
+      const p = document.createElement('p'); p.style.cssText = 'font-size:13px;color:#6B7280';
+      p.textContent = 'Noch keine eigenen Bilder. Antippen im Raster löscht ein Bild.';
+      inhalt.appendChild(p); return;
+    }
+    const gruppen = {};
+    alle.forEach(x => (gruppen[x.kollektion] = gruppen[x.kollektion] || []).push(x));
+    Object.keys(gruppen).sort().forEach(k => {
+      const zeile = document.createElement('div'); zeile.className = 'galerie-kopf';
+      const t = document.createElement('h3'); t.style.fontSize = '15px'; t.textContent = k + ' (' + gruppen[k].length + ')';
+      const aus = document.createElement('button'); aus.className = 'dunkel';
+      const key = 'eigen:' + k;
+      const knopf = () => { aus.textContent = bilderAus.serien[key] ? 'wieder rein' : 'ausschließen';
+                            grid.style.opacity = bilderAus.serien[key] ? '.45' : ''; };
+      aus.onclick = () => { bilderAus.serien[key] = !bilderAus.serien[key]; bilderAusSichern(); knopf(); };
+      zeile.appendChild(t); zeile.appendChild(aus); inhalt.appendChild(zeile);
+      const grid = document.createElement('div'); grid.className = 'galerie';
+      gruppen[k].forEach(x => {
+        const f = document.createElement('figure');
+        const im = document.createElement('img'); im.src = x.url; im.alt = '';
+        f.appendChild(im);
+        f.onclick = async () => {
+          if(!confirm('Dieses Bild aus „' + k + '" löschen?')) return;
+          await eigenTun('readwrite', s => s.delete(x.roh));
+          URL.revokeObjectURL(eigenUrls[x.roh]); delete eigenUrls[x.roh];
+          bilderListe = null; zeichnen();
+        };
+        grid.appendChild(f);
+      });
+      inhalt.appendChild(grid);
+      knopf();
+    });
+  };
+  plus.onclick = () => eigeneHinzufuegen(zeichnen);
+  await zeichnen();
+}
+
 async function zeigeGalerie(){
   $('sheetTitel').textContent = 'Startbilder';
   el.bExport.hidden = true;
@@ -2572,8 +2686,9 @@ async function zeigeGalerie(){
   el.sheet.hidden = false;
   const hinweis = document.createElement('p');
   hinweis.style.cssText = 'margin:12px 0 4px;font-size:13px;color:#6B7280;line-height:1.5';
-  hinweis.textContent = 'Antippen schließt ein Bild aus, der Serienknopf eine ganze Serie. Alle Bilder liegen im Gerät, nur deine Serien.';
+  hinweis.textContent = 'Antippen schließt ein Bild aus, der Serienknopf eine ganze Serie.';
   el.sheetList.appendChild(hinweis);
+  await eigeneAbschnitt(el.sheetList);
 
   for(const s of SERIEN){
     const [name] = s;
@@ -2630,9 +2745,10 @@ async function startBildLaden(){
   const img = $('startBild'), q = $('startBildQuelle');
   if(!img || !q) return;
   q.textContent = 'Startbild wird geladen …'; q.hidden = false;
-  let alle;
-  try{ alle = await bilderListeHolen(); }
-  catch(e){ q.textContent = 'Kein Startbild — ' + e.message; return; }
+  let alle = [], fehler = '';
+  try{ alle = await bilderListeHolen(); }catch(e){ fehler = e.message; }
+  alle = alle.concat(await eigeneHolen());
+  if(!alle.length){ q.textContent = 'Kein Startbild — ' + (fehler || 'keine Bilder'); return; }
   const frei = alle.filter(x => !bilderAus.serien[x.serie] && !bilderAus.figuren[String(x.id)]);
   if(!frei.length){ q.textContent = 'Kein Startbild — alles ausgefiltert'; return; }
   for(let n = 0; n < 3; n++){
@@ -2641,7 +2757,7 @@ async function startBildLaden(){
       await bildZeigen(img, x.url);
       img.hidden = false;
       startBildAktuell = { art:'figur', id:String(x.id) };
-      q.textContent = x.name + '  ·  ' + x.serie + '  ·  Bild antippen = nie wieder zeigen';
+      q.textContent = (x.kollektion ? x.kollektion : x.name + '  ·  ' + x.serie) + '  ·  Bild antippen = nie wieder zeigen';
       return;
     }catch(e){}
   }
