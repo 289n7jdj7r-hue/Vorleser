@@ -582,8 +582,8 @@
         <button class="ghost" id="bSchlaf" aria-pressed="false">Schlafmodus</button>
       </div>
       <div class="field">
-        <label>Lautstärke</label>
-        <button class="ghost" id="bLauter" aria-pressed="false">Lauter</button>
+        <label for="gain">Lautstärke <span id="gainWert" style="color:var(--marker)"></span></label>
+        <input type="range" id="gain" min="-10" max="16" step="2" value="0" style="width:170px">
       </div>
       <div class="field">
         <label>Aussprache</label>
@@ -805,7 +805,7 @@
 (function(){
 "use strict";
 
-const APP_VERSION = 'v62';
+const APP_VERSION = 'v63';
 
 /* ══ Elemente ═══════════════════════════════════════════ */
 const $ = id => document.getElementById(id);
@@ -1831,8 +1831,15 @@ function zeigeVerbrauch(){
   el.sheetList.appendChild(tarif);
 }
 
-let lauterAn = false, lauterOhneGain = false;
-try{ lauterAn = localStorage.getItem('vorleser.lauter') === '1'; }catch(e){}
+/* Lautstärke in dB, wird vom Sprachdienst mit ins Audio gerechnet — auf dem iPhone
+   lässt sich die Wiedergabe sonst nicht leiser oder lauter machen als das System. */
+let gainDb = 0, lauterOhneGain = false;
+try{
+  const g = localStorage.getItem('vorleser.gain');
+  if(g !== null) gainDb = Math.max(-10, Math.min(16, parseInt(g, 10) || 0));
+  else if(localStorage.getItem('vorleser.lauter') === '1') gainDb = 6;   // alter „Lauter"-Schalter
+}catch(e){}
+const lauterAn = () => gainDb !== 0;
 async function wolkeSprich(text){
   const d = wolke.dienst;
   if(grenzeErreicht(d, text.length)){
@@ -1849,7 +1856,7 @@ async function wolkeSprichRoh(text){
   if(d === 'azure'){
     const ssml = '<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="'
       + locale() + '"><voice name="' + wolke.stimme + '">'
-      + (lauterAn ? '<prosody volume="+6dB">' + xmlEsc(text) + '</prosody>' : xmlEsc(text))
+      + (lauterAn() ? '<prosody volume="' + (gainDb > 0 ? '+' : '') + gainDb + 'dB">' + xmlEsc(text) + '</prosody>' : xmlEsc(text))
       + '</voice></speak>';
     const r = await fetch('https://' + wolke.region + '.tts.speech.microsoft.com/cognitiveservices/v1', {
       method:'POST',
@@ -1869,10 +1876,10 @@ async function wolkeSprichRoh(text){
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ input:{text:text},
         voice:{languageCode:locale(), name:wolke.stimme},
-        audioConfig: lauterAn && !lauterOhneGain
-          ? {audioEncoding:'MP3', volumeGainDb:6, effectsProfileId:['headphone-class-device']}
+        audioConfig: lauterAn() && !lauterOhneGain
+          ? {audioEncoding:'MP3', volumeGainDb:gainDb}
           : {audioEncoding:'MP3'} }) });
-    if(!r.ok && r.status === 400 && lauterAn && !lauterOhneGain){
+    if(!r.ok && r.status === 400 && lauterAn() && !lauterOhneGain){
       // Stimme kann keine Lautstärke-Anhebung — ohne wiederholen
       lauterOhneGain = true;
       return wolkeSprichRoh(text);
@@ -2164,15 +2171,21 @@ setInterval(() => {
 }, 1000);
 
 $('bSchlaf').onclick = () => schlafUmschalten(!schlafAn);
-$('bLauter').setAttribute('aria-pressed', String(lauterAn));
-$('bLauter').onclick = () => {
-  lauterAn = !lauterAn;
-  try{ localStorage.setItem('vorleser.lauter', lauterAn ? '1' : '0'); }catch(e){}
-  $('bLauter').setAttribute('aria-pressed', String(lauterAn));
+function gainText(){ return gainDb === 0 ? 'normal' : (gainDb > 0 ? '+' : '') + gainDb + ' dB'; }
+function gainZeigen(){ $('gain').value = gainDb; $('gainWert').textContent = '· ' + gainText(); }
+gainZeigen();
+$('gain').oninput = () => {
+  gainDb = Math.max(-10, Math.min(16, parseInt($('gain').value, 10) || 0));
+  $('gainWert').textContent = '· ' + gainText();
+};
+$('gain').onchange = () => {
+  $('gain').oninput();
+  try{ localStorage.setItem('vorleser.gain', String(gainDb)); }catch(e){}
+  lauterOhneGain = false;
   // vorgeladene Sätze verwerfen, damit der nächste schon in neuer Lautstärke kommt
   wolke.cache.forEach((u, i) => { if(i !== idx) URL.revokeObjectURL(u); });
   [...wolke.cache.keys()].forEach(i => { if(i !== idx) wolke.cache.delete(i); });
-  melde(lauterAn ? 'Lauter an — gilt ab dem nächsten Satz' : 'Lauter aus');
+  melde('Lautstärke ' + gainText() + ' — ab dem nächsten Satz');
 };
 try{
   if(localStorage.getItem('vorleser.schlaf') === '1'){
