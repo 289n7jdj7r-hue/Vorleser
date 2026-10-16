@@ -192,7 +192,7 @@
     box-shadow:0 8px 22px rgba(0,0,0,.35);transition:opacity .2s,transform .2s;
   }
   .zurueck:hover{transform:translateX(-50%) translateY(-1px)}
-  @media (max-width:640px){
+  @media (max-width:640px), (pointer:coarse) and (max-height:520px){
     .zurueck{bottom:calc(92px + env(safe-area-inset-bottom));left:16px;transform:none;padding:9px 14px;font-size:12px}
     .zurueck:hover{transform:none}
   }
@@ -236,7 +236,7 @@
   .wort__knoepfe{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px}
   .wort__warte{color:#8A8371;font-size:13.5px;font-style:italic}
   .vok{border-left:3px solid var(--petrol);background:#EEF3F3}
-  @media (max-width:640px){
+  @media (max-width:640px), (pointer:coarse) and (max-height:520px){
     .doc{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
   }
 
@@ -341,7 +341,7 @@
   }
   .alert b{display:block;margin-bottom:4px;font-size:14px}
 
-  @media (max-width:820px){
+  @media (max-width:820px), (pointer:coarse) and (max-height:520px){
     .console__row{gap:11px;padding:9px 12px}
     .readout{order:9;width:100%}
     .readout__title{max-width:100%}
@@ -356,7 +356,7 @@
   }
 
   /* ── Handy: alles kompakter, nichts abgeschnitten ────────── */
-  @media (max-width:640px){
+  @media (max-width:640px), (pointer:coarse) and (max-height:520px){
     .console__row{gap:9px;padding:8px 11px}
     .brand{margin-right:0}
     .brand__name{display:none}
@@ -544,6 +544,7 @@
       </div>
       <button class="ghost" id="bLib">Bibliothek <span id="libCount" style="opacity:.6"></span></button>
       <button class="ghost" id="bSheet">Sammlung <span id="markCount" style="opacity:.6"></span></button>
+      <button class="ghost" id="bFragen" title="Eine Frage zum Buch stellen">Fragen</button>
       <button class="ghost" id="bPanel" aria-pressed="false">Einstellungen</button>
     </div>
 
@@ -577,7 +578,7 @@
         </select>
       </div>
       <div class="field">
-        <label>Nach 30 Minuten</label>
+        <label>Nach 10 Minuten</label>
         <button class="ghost" id="bSchlaf" aria-pressed="false">Schlafmodus</button>
       </div>
       <div class="field">
@@ -766,6 +767,7 @@
 
 <button class="zurueck" id="bZurStelle" hidden>↑ Zur Vorlesestelle</button>
 
+
 <div class="minibar" id="minibar" hidden>
   <button class="tbtn" id="mPrev" aria-label="Satz zurück">
     <svg viewBox="0 0 24 24"><path d="M18 5v14L8 12z"/><path d="M6 5h2.2v14H6z"/></svg>
@@ -803,7 +805,7 @@
 (function(){
 "use strict";
 
-const APP_VERSION = 'v58';
+const APP_VERSION = 'v62';
 
 /* ══ Elemente ═══════════════════════════════════════════ */
 const $ = id => document.getElementById(id);
@@ -864,7 +866,7 @@ let buchAktuell = null;           // Bibliothekseintrag des offenen Buchs
 const GROSS = 100000;        // Abschnitte aus — Bücher werden immer ganz geladen
 const BLOCK = 100;           // Seiten je Abschnitt
 let zeigeFiguren = false;    // Standard aus — hält das Einlesen schnell
-const SCHLAF_MIN = 30;       // feste halbe Stunde
+const SCHLAF_MIN = 10;       // feste zehn Minuten
 let schlafAn = false;        // Schlafmodus aktiv
 let schlafRest = 0;          // verbleibende Millisekunden
 let imWarten = false;        // wartet gerade auf ein Lebenszeichen
@@ -912,8 +914,10 @@ function tidy(s){
     .replace(/\u00AD/g,'')
     .replace(/\uFB01/g,'fi').replace(/\uFB02/g,'fl').replace(/\uFB00/g,'ff')
     .replace(/\uFB03/g,'ffi').replace(/\uFB04/g,'ffl')
-    .replace(/[\u2018\u2019\u201B]/g,"'")
-    .replace(/[\u201C\u201D\u201E]/g,'"')
+    // Manche PDFs setzen ‟ oder ‛ als Apostroph: I‟m, sister‟s -> I'm, sister's
+    .replace(/([A-Za-zÄÖÜäöüß])[\u201F\u201B\u2032\u02BC\u00B4\u0060]+(?=[A-Za-zÄÖÜäöüß])/g,"$1'")
+    .replace(/[\u2018\u2019\u201B\u2032\u02BC]/g,"'")
+    .replace(/[\u201C\u201D\u201E\u201F\u2033]/g,'"')
     .replace(/\u2013|\u2014/g,'–')
     .replace(/[\u00A0\u2007\u202F]/g,' ')
     .replace(/[ \t]{2,}/g,' ');
@@ -946,13 +950,19 @@ function abbrAlle(liste){
   return out.sort((a,b)=>b.length-a.length);
 }
 
+/* Anreden, nach denen nie ein Satz endet: "Mrs. Dudley", "Dr. Montague" */
+const ANREDE_RE = /\b(Mr|Mrs|Ms|Mx|Dr|Prof|St|Mt|Sr|Jr|Hr|Fr|Frl|Hrn|Capt|Col|Gen|Lt|Sgt|Rev|Fr|Mme|Mlle)\.(?=\s*["„«]?[A-ZÄÖÜ])/g;
+
 function protect(t){
-  SPACED().forEach(p => {
+  // Beide Sprachen schützen — beim Einlesen steht die Buchsprache noch nicht fest,
+  // sonst wird "Mrs. Dudley" im englischen Buch zu zwei Sätzen
+  SPACED_DE.concat(SPACED_EN).forEach(p => {
     t = t.split(p[0]).join(p[1]);
     const c = p[0].charAt(0).toUpperCase() + p[0].slice(1);
     t = t.split(c).join(p[1].charAt(0).toUpperCase() + p[1].slice(1));
   });
-  abbrAlle(ABBR()).forEach(a => { t = t.split(a).join(a.split('.').join(SP)); });
+  t = t.replace(ANREDE_RE, '$1' + SP);
+  abbrAlle(ABBR_DE.concat(ABBR_EN)).forEach(a => { t = t.split(a).join(a.split('.').join(SP)); });
   t = t.replace(/(\d)\.(?=\d)/g,'$1'+SP);                    // 4.3.2 / 1.500
   t = t.replace(/(^|[\s(])(\d{1,3})\.(?=\s)/g,'$1$2'+SP);    // "3. Kapitel", "1. Januar"
   t = t.replace(/\b([A-ZÄÖÜ])\.(?=\s*[A-ZÄÖÜ])/g,'$1'+SP);   // Initialen: J. W. Goethe
@@ -1019,6 +1029,52 @@ function versalienLoesen(t){
   return t;
 }
 
+/* Zusammengeklebtes lösen — entsteht, wenn pdf.js den Wortabstand verschluckt:
+   "diesomewhere ," -> "die somewhere,", "Ihad intended" -> "I had intended" */
+const ICH_WORTE = 'had|have|am|was|will|would|could|should|can|cannot|think|thought|know|knew|'
+  + 'said|say|saw|see|want|wanted|like|liked|dislike|mean|meant|just|never|always|heard|hear|'
+  + 'feel|felt|got|get|suppose|supposed|wonder|wondered|hope|hoped|guess|believe|believed|'
+  + 'remember|remembered|shall|might|must|did|do|told|tell|asked|ask|came|come|went|go|left|'
+  + 'looked|look|found|find|made|make|took|take|put|let|need|needed|tried|try|used|love|loved|'
+  + 'hate|hated|understand|understood|wish|wished|only|really|still|also|too|cannot|may|'
+  + 'thank|think|seem|seemed|began|begin|kept|keep|stood|sat|lay|ran|held|hold|gave|give|'
+  + 'brought|bring|sent|send|read|wrote|write|felt|turned|turn|walked|walk|moved|move|'
+  + 'noticed|notice|realized|realize|decided|decide|forgot|forget|woke|wake|slept|sleep|'
+  + 'spoke|speak|laughed|laugh|cried|cry|smiled|smile|opened|open|closed|close|shut|lost|'
+  + 'supposed|expected|expect|imagine|imagined|doubt|doubted|promise|promised|refuse|refused';
+const ICH_RE = new RegExp('\\bI(' + ICH_WORTE + ')\\b', 'g');
+const KLEBE_TAILS = 'somewhere|anywhere|everywhere|nowhere|something|anything|everything|nothing|'
+  + 'someone|anyone|everyone|however|whatever|whenever|wherever|whoever|without|within|'
+  + 'because|before|between|through|though|although|against|around|toward|towards|'
+  + 'herself|himself|itself|myself|yourself|themselves|ourselves|another|together|'
+  + 'already|perhaps|instead|indeed|really|enough|rather|almost|again|about';
+const KLEBE_RE = new RegExp('\\b([a-z]{2,})(' + KLEBE_TAILS + ')\\b', 'g');
+const KLEBE_OK = /^(where|how|un|re|al|be|de|en|dis|mis|pre|over|under|out|up|in|im|non|sub|fore|ever|no|any|some|every|there|here|him|her|it|my|your|our|them|round|turn|walk|run|lay|gad|knock|break|what|when|who|how|else)$/;
+
+function klebeLoesen(t){
+  if(!t) return t;
+  t = t.replace(/\s+([,.;:!?])(?=\s|$)/g, '$1');                        // "somewhere ," -> "somewhere,"
+  t = t.replace(/([a-zäöüß]{2,})\.(?=[A-ZÄÖÜ][a-zäöü])/g, '$1. ');       // "house.The" -> "house. The"
+  t = t.replace(/([a-zäöüß])[,;](?=[A-Za-zÄÖÜäöüß])/g, (m, a) => a + m.charAt(1) + ' ');
+  t = t.replace(ICH_RE, 'I $1');                                          // "Ihad" -> "I had"
+  t = t.replace(KLEBE_RE, (m, kopf, rest) => KLEBE_OK.test(kopf) ? m : kopf + ' ' + rest);
+  return t.replace(/ {2,}/g, ' ');
+}
+
+/* Früher eingelesene Bücher: "Mrs." + "Dudley ..." als getrennte Sätze -> wieder einer */
+function anredenHeilen(liste){
+  const out = [];
+  const ende = /\b(Mr|Mrs|Ms|Mx|Dr|Prof|St|Mt|Sr|Jr|Hr|Fr|Capt|Col|Gen|Lt|Sgt|Rev|Mme|Mlle)\.$/;
+  for(const u of liste){
+    const v = out[out.length - 1];
+    if(v && v.p === u.p && v.a === u.a && ende.test(v.t) && /^["„«]?[A-ZÄÖÜ]/.test(u.t)
+       && (v.t.length + u.t.length) < 240){
+      v.t = v.t + ' ' + u.t;
+    } else out.push({t:u.t, p:u.p, a:u.a});
+  }
+  return out;
+}
+
 /* Fußnotenziffern, die am Text kleben: "(SAWS)]1 Khalid" */
 function fussnotenLoesen(t){
   return t.replace(/([\]\)])\s*\d{1,3}(?=\s|$)/g, '$1')
@@ -1054,7 +1110,7 @@ async function pageLines(page, colMode){
     l.parts.sort((a,b)=>a.x-b.x);
     let s = '', end = null;
     for(const p of l.parts){
-      if(end!==null && p.x-end > Math.max(1.1, l.h*0.16) && !/\s$/.test(s) && !/^\s/.test(p.s)) s += ' ';
+      if(end!==null && p.x-end > Math.max(0.8, l.h*0.12) && !/\s$/.test(s) && !/^\s/.test(p.s)) s += ' ';
       s += p.s;
       end = p.x + p.w;
     }
@@ -1140,7 +1196,7 @@ function paragraphs(lines, drop){
   const right = lines.reduce((m,l)=>Math.max(m,l.x1), 0);
   const out = [];
   let buf = '';
-  const flush = () => { if(buf.trim()) out.push(buf.trim()); buf = ''; };
+  const flush = () => { if(buf.trim()) out.push(klebeLoesen(buf.trim())); buf = ''; };
 
   for(const l of lines){
     let t = l.text;
@@ -1178,7 +1234,7 @@ async function build(){
   const c = buchAktuell && buchAktuell.text;
   if(c && c.von === from && c.bis === to && c.spalten === colMode
      && !!c.figuren === !!zeigeFiguren && Array.isArray(c.units) && c.units.length){
-    units = c.units.map(u => ({text:u.t, speak:spoken(u.t), page:u.p, para:u.a}));
+    units = anredenHeilen(c.units).map(u => { const t = klebeLoesen(u.t); return {text:t, speak:spoken(t), page:u.p, para:u.a}; });
     figuren = c.figuren || {};
     wolkeLeeren();
     abschnittZeigen(from, to, total);
@@ -1191,6 +1247,7 @@ async function build(){
     show('doc');
     enable(true);
     paint();
+    buchWahlAnwenden();
     if(zielSeite){
       const z = units.findIndex(u => u.page >= zielSeite);
       if(z >= 0){ idx = z; paint(); }
@@ -1262,6 +1319,7 @@ async function build(){
   show('doc');
   enable(true);
   paint();
+  buchWahlAnwenden();
   if(zielSeite){
     const z = units.findIndex(u => u.page >= zielSeite);
     if(z >= 0){ idx = z; paint(); }
@@ -2035,7 +2093,7 @@ function schlafUmschalten(an){
   lautstaerkeZuruecksetzen();
   $('bSchlaf').setAttribute('aria-pressed', String(an));
   try{ localStorage.setItem('vorleser.schlaf', an ? '1' : '0'); }catch(e){}
-  melde(an ? 'Schlafmodus an — Nachfrage nach 30 Minuten' : 'Schlafmodus aus');
+  melde(an ? 'Schlafmodus an — Nachfrage nach ' + SCHLAF_MIN + ' Minuten' : 'Schlafmodus aus');
   if(units.length) paint();
 }
 
@@ -2355,8 +2413,47 @@ function setzeSprache(neu){
     if(mode === 'playing') play(idx);
   }
 }
-el.langDe.onclick = () => setzeSprache('de');
-el.langEn.onclick = () => setzeSprache('en');
+el.langDe.onclick = () => { setzeSprache('de'); buchWahlSichern(); };
+el.langEn.onclick = () => { setzeSprache('en'); buchWahlSichern(); };
+
+/* ══ Sprache und Stimme pro Buch merken ══════════════════
+   Jedes Buch behält, was beim Öffnen oder zuletzt gewählt war. */
+const BUCHWAHL = 'vorleser.buchwahl';
+function buchWahlAlle(){
+  try{ return JSON.parse(localStorage.getItem(BUCHWAHL) || '{}'); }catch(e){ return {}; }
+}
+function buchWahlSichern(){
+  if(!units.length) return;
+  try{
+    const alle = buchWahlAlle();
+    alle[standKey()] = { sprache:lang, stimme:wolke.stimme || '', dienst:wolke.dienst || '',
+                         wann:new Date().toISOString() };
+    const k = Object.keys(alle);
+    if(k.length > 40){
+      k.sort((a,b) => (alle[a].wann||'').localeCompare(alle[b].wann||''));
+      delete alle[k[0]];
+    }
+    localStorage.setItem(BUCHWAHL, JSON.stringify(alle));
+  }catch(e){}
+}
+function buchWahlAnwenden(){
+  if(!units.length) return;
+  const w = buchWahlAlle()[standKey()];
+  if(!w){ buchWahlSichern(); return; }           // erstes Öffnen: aktuelle Wahl gehört ab jetzt zu diesem Buch
+  if(w.sprache && w.sprache !== lang) setzeSprache(w.sprache);
+  if(w.stimme && w.dienst === wolke.dienst && w.stimme !== wolke.stimme){
+    const liste = wolke.stimmen || [];
+    if(!liste.length || liste.some(v => v.id === w.stimme)){
+      wolke.stimme = w.stimme;
+      wolke.proSprache[lang] = w.stimme;
+      const s = $('wStimme');
+      if(s) s.value = w.stimme;
+      wolkeLeeren(); wolkeSichern(); wolkeChipZeigen(); oberflaeche();
+    }
+  }
+  const sv = (wolke.stimmen || []).find(v => v.id === wolke.stimme);
+  melde((lang === 'de' ? 'Deutsch' : 'Englisch') + (sv ? ' · ' + sv.name : ''));
+}
 
 function waehle(i){
   if(!slot[lang][i]) return;
@@ -2396,7 +2493,7 @@ const konsole = document.querySelector('.console');
    Die Zeile mit Titel, Bibliothek und Einstellungen bleibt ein eigenes,
    unbewegliches Element. Alles andere wandert in einen Bereich darunter,
    der für sich scrollt. So kann der Einstellungen-Knopf nie verrutschen. */
-const handy = window.matchMedia('(max-width:640px)').matches;
+const handy = window.matchMedia('(max-width:640px), (pointer:coarse) and (max-height:520px)').matches;
 if(handy){
   const zeile = konsole.querySelector('.console__row');
   const klapp = document.createElement('div');
@@ -2426,7 +2523,14 @@ el.bPanel.onclick = () => {
 function stelleZurueck(){
   kopfMessen();
   const m = el.doc.querySelector('.sent.now');
-  if(m){ userScrolled = false; scrollTo(m); }
+  if(!m) return;
+  userScrolled = false;
+  // nach dem Drehen ohne Animation springen, sonst flackert es
+  const r = m.getBoundingClientRect();
+  if(handy){
+    const kopf = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--kopf')) || 58;
+    window.scrollTo({top: Math.max(0, window.scrollY + r.top - kopf - window.innerHeight * 0.28), behavior:'auto'});
+  } else scrollTo(m);
 }
 let groesseUhr = null;
 window.addEventListener('resize', () => {
@@ -3166,6 +3270,7 @@ $('wolkeChip').onclick = () => {
   const s = $('wStimme');
   if(s) s.value = naechste.id;
   wolkeLeeren(); wolkeSichern(); wolkeChipZeigen(); oberflaeche();
+  buchWahlSichern();
   melde(naechste.name);
   if(mode === 'playing') play(idx);
 };
@@ -3173,6 +3278,7 @@ $('wStimme').onchange = () => {
   wolke.stimme = $('wStimme').value;
   wolke.proSprache[lang] = wolke.stimme;
   wolkeLeeren(); wolkeSichern(); wolkeChipZeigen(); oberflaeche();
+  buchWahlSichern();
   if(mode === 'playing') play(idx);
 };
 $('wTest').onclick = async () => {
@@ -3739,35 +3845,20 @@ async function geminiModellListe(key){
   return geminiModelle;
 }
 
-async function erklaeren(wort, kontext, quelle, jap){
+/* Schickt einen Prompt an das neueste Flash-Modell und liefert das JSON aus der Antwort.
+   Fehlergrund landet in geminiGrund. */
+async function geminiJSON(prompt, maxOut){
   geminiGrund = '';
   const key = gKeyWert || '';
-  if(!key) return null;
+  if(!key){ geminiGrund = 'kein Gemini-Schlüssel'; return null; }
   const modelle = await geminiModellListe(key);
-  let prompt = 'Wort: "' + wort + '" (Sprache ' + (quelle || 'unbekannt') + ').\n'
-    + 'Textstelle, in der es steht: "' + kontext.replace(/"/g, "'") + '".\n'
-    + 'Antworte NUR mit JSON, ohne Erklärung davor oder danach:\n'
-    + '{"im_satz_de":"ein Satz auf Deutsch: was das Wort GENAU IN DIESER TEXTSTELLE ausdrückt, '
-    + 'mit Bezug auf die konkrete Situation dort — keine allgemeine Definition",'
-    + '"erklaerung_de":"die allgemeine Bedeutung des Wortes in einem Satz",'
-    + '"erklaerung_en":"the general meaning in one English sentence",'
-    + '"beispiel_de":"ein natürlicher deutscher Beispielsatz mit dem Wort in derselben Bedeutung wie in der Textstelle",'
-    + '"beispiel_en":"one natural English example sentence, same sense as in the passage",'
-    + '"aussprache":"IPA"';
-  if(jap){
-    prompt += ',"kana":"die übliche Lesung des japanischen Wortes ' + jap
-      + ' in Hiragana, bei Fremdwörtern in Katakana, keine Romaji",'
-      + '"kanji":[{"zeichen":"ein einzelnes Kanji aus ' + jap + '","bedeutung":"kurze deutsche Bedeutung",'
-      + '"lesung":"Kun-Lesung und On-Lesung in Kana, z. B. わる · アク"}]';
-  }
-  prompt += '}';
   const fehler = [];
   for(const m of modelle){
     // Zwei Anläufe je Modell: erst mit gedrosseltem Nachdenken (neue Modelle),
     // dann ohne diese Angabe (ältere Modelle kennen sie nicht)
     const varianten = [
-      { temperature:0.3, maxOutputTokens:1500, thinkingConfig:{ thinkingLevel:'low' } },
-      { temperature:0.3, maxOutputTokens:1500 }
+      { temperature:0.3, maxOutputTokens:maxOut || 1500, thinkingConfig:{ thinkingLevel:'low' } },
+      { temperature:0.3, maxOutputTokens:maxOut || 1500 }
     ];
     for(const cfg of varianten){
       try{
@@ -3796,6 +3887,28 @@ async function erklaeren(wort, kontext, quelle, jap){
   }
   geminiGrund = fehler.slice(0, 2).join('  ·  ');
   return null;
+}
+
+async function erklaeren(wort, kontext, quelle, jap){
+  if(!gKeyWert) return null;
+  let prompt = 'Wort: "' + wort + '" (Sprache ' + (quelle || 'unbekannt') + ').\n'
+    + 'Textstelle, in der es steht: "' + kontext.replace(/"/g, "'") + '".\n'
+    + 'Antworte NUR mit JSON, ohne Erklärung davor oder danach:\n'
+    + '{"im_satz_de":"ein Satz auf Deutsch: was das Wort GENAU IN DIESER TEXTSTELLE ausdrückt, '
+    + 'mit Bezug auf die konkrete Situation dort — keine allgemeine Definition",'
+    + '"erklaerung_de":"die allgemeine Bedeutung des Wortes in einem Satz",'
+    + '"erklaerung_en":"the general meaning in one English sentence",'
+    + '"beispiel_de":"ein natürlicher deutscher Beispielsatz mit dem Wort in derselben Bedeutung wie in der Textstelle",'
+    + '"beispiel_en":"one natural English example sentence, same sense as in the passage",'
+    + '"aussprache":"IPA"';
+  if(jap){
+    prompt += ',"kana":"die übliche Lesung des japanischen Wortes ' + jap
+      + ' in Hiragana, bei Fremdwörtern in Katakana, keine Romaji",'
+      + '"kanji":[{"zeichen":"ein einzelnes Kanji aus ' + jap + '","bedeutung":"kurze deutsche Bedeutung",'
+      + '"lesung":"Kun-Lesung und On-Lesung in Kana, z. B. わる · アク"}]';
+  }
+  prompt += '}';
+  return geminiJSON(prompt, 1500);
 }
 
 function sprich(text, sprache){
@@ -4082,6 +4195,191 @@ $('bVonVorn').onclick = () => {
 
 el.bMark.onclick = merken;
 el.bSheet.onclick = () => zeigeSammlung();
+
+/* ══ Im Buch fragen ═══════════════════════════════════════
+   Erst nennt Gemini Suchbegriffe in der Buchsprache, dann werden die
+   passendsten Stellen im Gerät herausgesucht und nur diese Auszüge
+   mitgeschickt — so bleibt es billig und das ganze Buch verlässt
+   das Gerät nie. */
+let frageVerlauf = [];          // {frage, antwort, fundstellen, buch}
+let frageLaeuft = false;
+
+function frageEsc(t){ return String(t || '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+function frageBegriffeLokal(frage){
+  return Array.from(new Set(frage.toLowerCase().replace(/[^\p{L}\p{N}\s'-]/gu, ' ').split(/\s+/)
+    .filter(w => w.length >= 4))).slice(0, 12);
+}
+
+function frageStellenSuchen(begriffe){
+  const n = units.length;
+  if(!n) return [];
+  const texte = units.map(u => u.text.toLowerCase());
+  const treffer = new Float32Array(n);
+  let gesamt = 0;
+  for(const b0 of begriffe){
+    const b = String(b0 || '').toLowerCase().trim();
+    if(b.length < 3) continue;
+    let re;
+    try{ re = new RegExp('(^|[^\\p{L}])' + b.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?=$|[^\\p{L}])', 'u'); }
+    catch(e){ continue; }
+    const wo = [];
+    for(let i = 0; i < n; i++) if(re.test(texte[i])) wo.push(i);
+    if(!wo.length) continue;
+    const gewicht = 1 / Math.log(2 + wo.length);       // seltene Begriffe zählen mehr
+    for(const i of wo) treffer[i] += gewicht;
+    gesamt += wo.length;
+  }
+  if(!gesamt) return [];
+  const R = 4, fenster = [];
+  for(let i = 0; i < n; i++){
+    let sum = 0;
+    for(let k = Math.max(0, i - R); k <= Math.min(n - 1, i + R); k++) sum += treffer[k];
+    if(sum > 0) fenster.push([sum, i]);
+  }
+  fenster.sort((a, b) => b[0] - a[0]);
+  const gewaehlt = [];
+  let zeichen = 0;
+  for(const [, i] of fenster){
+    if(gewaehlt.some(j => Math.abs(j - i) <= 2 * R)) continue;
+    const von = Math.max(0, i - R), bis = Math.min(n - 1, i + R);
+    let laenge = 0;
+    for(let k = von; k <= bis; k++) laenge += units[k].text.length;
+    if(zeichen + laenge > 40000) break;
+    zeichen += laenge;
+    gewaehlt.push(i);
+    if(gewaehlt.length >= 28) break;
+  }
+  return gewaehlt.sort((a, b) => a - b).map(i => ({
+    von: Math.max(0, i - R), bis: Math.min(n - 1, i + R)
+  }));
+}
+
+async function frageBeantworten(frage){
+  const titel = buchTitel();
+  const sprache = lang === 'de' ? 'Deutsch' : 'Englisch';
+  // 1) Suchbegriffe in der Buchsprache, inklusive Synonymen und Namensformen
+  let begriffe = frageBegriffeLokal(frage);
+  const k = await geminiJSON('Ein Leser stellt eine Frage zum Buch "' + titel + '" (Buchsprache: ' + sprache + ').\n'
+    + 'Frage: "' + frage.replace(/"/g, "'") + '"\n'
+    + 'Nenne 8 bis 15 Suchbegriffe, mit denen man die passende Stelle im Buchtext finden kann: '
+    + 'Namen, Orte, Gegenstände, Schlüsselwörter, dazu Synonyme — alles in der Buchsprache (' + sprache + '), '
+    + 'einzelne Wörter oder kurze Wortgruppen, Kleinschreibung egal. '
+    + 'Antworte NUR mit JSON: {"begriffe":["...","..."]}', 400);
+  if(k && Array.isArray(k.begriffe)) begriffe = Array.from(new Set(begriffe.concat(k.begriffe.map(String))));
+  // 2) Stellen im Gerät heraussuchen
+  const stellen = frageStellenSuchen(begriffe);
+  if(!stellen.length) return { antwort:'Dazu habe ich im Buchtext keine passende Stelle gefunden. Versuch es mit anderen Worten oder einem Namen aus dem Buch.', fundstellen:[] };
+  const auszuege = stellen.map(st => {
+    const kopf = '[Satz ' + st.von + ' · Seite ' + units[st.von].page + ']';
+    const txt = units.slice(st.von, st.bis + 1).map((u, j) => '⟨' + (st.von + j) + '⟩ ' + u.text).join(' ');
+    return kopf + '\n' + txt;
+  }).join('\n\n');
+  // 3) Antwort aus den Auszügen
+  const a = await geminiJSON('Du hilfst jemandem, der das Buch "' + titel + '" hört und sich an eine Stelle erinnern will.\n'
+    + 'Frage: "' + frage.replace(/"/g, "'") + '"\n\n'
+    + 'Hier sind Auszüge aus dem Buch. Jeder Satz trägt vorne seine Nummer in ⟨⟩, jeder Block vorne die Seite.\n\n'
+    + auszuege + '\n\n'
+    + 'Beantworte die Frage auf Deutsch NUR anhand dieser Auszüge, in 2 bis 5 Sätzen, und sag dabei, was an der Stelle passiert. '
+    + 'Wenn die Auszüge die Frage nicht beantworten, sag das ehrlich. '
+    + 'Antworte NUR mit JSON: {"antwort":"...","gefunden":true,'
+    + '"fundstellen":[{"satz":Satznummer aus ⟨⟩ des Satzes, an dem die Stelle beginnt,"zitat":"kurzes wörtliches Zitat aus diesem Satz, höchstens 25 Wörter","warum":"ein halber Satz, was dort steht"}]}'
+    + ' — höchstens 4 Fundstellen, die beste zuerst, leeres Feld wenn nichts passt.', 1500);
+  if(!a) return { antwort:'Keine Antwort bekommen' + (geminiGrund ? ' — ' + geminiGrund : '.'), fundstellen:[] };
+  const fund = (Array.isArray(a.fundstellen) ? a.fundstellen : [])
+    .map(f => ({ satz: parseInt(f.satz, 10), zitat: String(f.zitat || ''), warum: String(f.warum || '') }))
+    .filter(f => f.satz >= 0 && f.satz < units.length)
+    .map(f => Object.assign(f, { seite: units[f.satz].page }));
+  return { antwort: String(a.antwort || ''), fundstellen: fund };
+}
+
+function zeigeFragen(){
+  $('sheetTitel').textContent = 'Im Buch fragen';
+  el.bExport.hidden = true;
+  el.sheetList.innerHTML = '';
+  el.sheet.hidden = false;
+
+  const kasten = document.createElement('div');
+  kasten.style.cssText = 'margin:14px 0 6px';
+  if(!units.length){
+    const p = document.createElement('p'); p.className = 'sheet__leer';
+    p.textContent = 'Erst ein Buch öffnen, dann kannst du Fragen dazu stellen.';
+    el.sheetList.appendChild(p); return;
+  }
+  if(!gKeyWert){
+    const p = document.createElement('p'); p.className = 'sheet__leer';
+    p.innerHTML = 'Dafür braucht es den Gemini-Schlüssel.<br>Einstellungen → „Gemini-Schlüssel" eintragen → Übernehmen.';
+    el.sheetList.appendChild(p); return;
+  }
+  const eingabe = document.createElement('textarea');
+  eingabe.rows = 3;
+  eingabe.placeholder = 'z. B. Wo erklärt der Doktor, dass die Architektur des Hauses merkwürdig ist?';
+  eingabe.style.cssText = 'width:100%;box-sizing:border-box;font:15.5px/1.5 var(--font-read);color:var(--ink);'
+    + 'background:#FAF7EE;border:1px solid #DCD8CF;border-radius:10px;padding:11px 13px;resize:vertical';
+  const zeile = document.createElement('div');
+  zeile.style.cssText = 'display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap';
+  const los = document.createElement('button'); los.className = 'cta'; los.textContent = 'Im Buch nachsehen';
+  los.style.cssText = 'padding:9px 17px;font-size:13.5px';
+  const status = document.createElement('span');
+  status.style.cssText = 'font-family:var(--font-mono);font-size:10px;letter-spacing:.08em;color:#8E8878';
+  status.textContent = 'Buch: ' + buchTitel();
+  zeile.appendChild(los); zeile.appendChild(status);
+  kasten.appendChild(eingabe); kasten.appendChild(zeile);
+  el.sheetList.appendChild(kasten);
+
+  const ergebnisse = document.createElement('div');
+  el.sheetList.appendChild(ergebnisse);
+
+  const karte = e => {
+    const box = document.createElement('div'); box.className = 'book';
+    const h3 = document.createElement('h3'); h3.textContent = e.frage; box.appendChild(h3);
+    const ant = document.createElement('div'); ant.className = 'mark'; ant.style.borderLeftColor = 'var(--petrol)';
+    ant.textContent = e.antwort; box.appendChild(ant);
+    e.fundstellen.forEach(f => {
+      const d = document.createElement('div'); d.className = 'mark';
+      d.innerHTML = '„' + frageEsc(f.zitat) + '"' + (f.warum ? '<br><span style="color:#8E8878;font-size:13px">' + frageEsc(f.warum) + '</span>' : '');
+      const fuss = document.createElement('div'); fuss.className = 'mark__foot';
+      const sp = document.createElement('span'); sp.textContent = 'Seite ' + f.seite; fuss.appendChild(sp);
+      if(e.buch === buchTitel()){
+        const g = document.createElement('button'); g.textContent = 'Hingehen';
+        g.onclick = () => { el.sheet.hidden = true; jump(f.satz, false); };
+        const v = document.createElement('button'); v.textContent = 'Ab hier vorlesen';
+        v.onclick = () => { el.sheet.hidden = true; jump(f.satz, true); };
+        fuss.appendChild(g); fuss.appendChild(v);
+      }
+      d.appendChild(fuss); box.appendChild(d);
+    });
+    return box;
+  };
+  const zeichnen = () => {
+    ergebnisse.innerHTML = '';
+    frageVerlauf.slice().reverse().forEach(e => ergebnisse.appendChild(karte(e)));
+  };
+  zeichnen();
+
+  los.onclick = async () => {
+    const frage = eingabe.value.trim();
+    if(!frage || frageLaeuft) return;
+    frageLaeuft = true;
+    los.disabled = true; los.textContent = 'Suche …';
+    status.textContent = 'Suchbegriffe werden gesammelt …';
+    try{
+      const e = await frageBeantworten(frage);
+      frageVerlauf.push({ frage, antwort: e.antwort, fundstellen: e.fundstellen, buch: buchTitel() });
+      if(frageVerlauf.length > 12) frageVerlauf.shift();
+      eingabe.value = '';
+      status.textContent = e.fundstellen.length ? e.fundstellen.length + ' Fundstelle' + (e.fundstellen.length > 1 ? 'n' : '') : 'nichts Passendes';
+      zeichnen();
+    }catch(err){
+      status.textContent = 'Fehler: ' + (err.message || err);
+    }
+    los.disabled = false; los.textContent = 'Im Buch nachsehen';
+    frageLaeuft = false;
+  };
+  eingabe.addEventListener('keydown', ev => { if(ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)) los.click(); });
+  setTimeout(() => eingabe.focus(), 60);
+}
+$('bFragen').onclick = zeigeFragen;
 el.bSheetZu.onclick = () => { el.sheet.hidden = true; };
 el.sheet.onclick = e => { if(e.target === el.sheet) el.sheet.hidden = true; };
 
