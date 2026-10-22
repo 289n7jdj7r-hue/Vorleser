@@ -596,6 +596,7 @@
           <button class="ghost" id="bFiguren" aria-pressed="false">Abbildungen anzeigen</button>
           <button class="ghost" id="bTitelei" aria-pressed="true" hidden>Titelei überspringen</button>
           <button class="ghost" id="bAnfang">Zum Textanfang</button>
+          <button class="ghost" id="bVokSperr" aria-pressed="true">Vokabeln auf Sperrbildschirm</button>
         </span>
       </div>
       <div class="field" style="flex:1 1 100%;border-top:1px solid var(--line);padding-top:14px;margin-top:2px">
@@ -664,6 +665,7 @@
           <button class="ghost" id="uSpeichern">Übernehmen</button>
           <button class="ghost" id="uJapan" aria-pressed="false">Japanisch dazu</button>
           <button class="ghost" id="bVok" hidden>Vokabeln <span id="vokCount" style="opacity:.6"></span></button>
+          <button class="ghost" id="bWidget" title="Datei für das Scriptable-Widget">Vokabeln fürs Widget</button>
         </div>
         <p id="uStatus" style="margin:10px 0 0;font-family:var(--font-mono);font-size:10px;
            letter-spacing:.1em;color:#697082"></p>
@@ -805,7 +807,7 @@
 (function(){
 "use strict";
 
-const APP_VERSION = 'v63';
+const APP_VERSION = 'v65';
 
 /* ══ Elemente ═══════════════════════════════════════════ */
 const $ = id => document.getElementById(id);
@@ -1617,8 +1619,10 @@ function paint(){
   el.mInfo.innerHTML = 'Seite <b>' + (units[idx] ? units[idx].page : '—') + '</b>'
     + '  ·  <b>' + Math.round(idx / Math.max(1, units.length - 1) * 100) + ' %</b>'
     + (schlafAn ? '  ·  Schlaf <b>' + Math.max(0, Math.ceil(schlafRest/60000)) + '</b>' : '');
+  // Nach Handscrollen läuft der Text nach 8 Sekunden Ruhe wieder von selbst mit
+  if(userScrolled && mode === 'playing' && Date.now() - letzterHandScroll > 8000) userScrolled = false;
   if(follow && !userScrolled && marke) scrollTo(marke);
-  else if(marke) knopfPruefen();
+  knopfPruefen();
   sperrbildschirm();
   standSichern(false);
 }
@@ -2070,7 +2074,7 @@ function stop(){
 function jump(to, keepPlaying){
   idx = Math.max(0, Math.min(units.length-1, to));
   userScrolled = false;
-  $('bZurStelle').hidden = true;
+  knopfPruefen();
   if(keepPlaying || mode === 'playing') play(idx);
   else { gen++; synth.cancel(); mode='idle'; icons(); paint(); }
 }
@@ -3076,6 +3080,33 @@ function vokabelnExport(){
   a.download = 'vokabeln.txt'; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 }
+
+/* Datei für das Scriptable-Widget: in iCloud Drive → Scriptable sichern */
+async function widgetExport(){
+  if(!vokabeln.length){ melde('Noch keine Vokabeln gemerkt'); return; }
+  const liste = vokabeln.map(v => ({
+    wort: v.wort || '', uebersetzung: v.uebersetzung || '', aussprache: v.aussprache || '',
+    im_satz: v.im_satz_de || v.erklaerung_de || '', japanisch: v.japanisch || '', kana: v.kana || '',
+    kanji: Array.isArray(v.kanji) ? v.kanji.slice(0, 3).map(k => ({
+      zeichen: k.zeichen || '', bedeutung: k.bedeutung || '', lesung: k.lesung || '' })) : [],
+    buch: v.buch || '', seite: v.seite || ''
+  }));
+  const text = JSON.stringify({ stand: new Date().toISOString(), vokabeln: liste });
+  const datei = new File([text], 'vorleser-vokabeln.json', {type:'application/json'});
+  try{
+    if(navigator.canShare && navigator.canShare({files:[datei]})){
+      await navigator.share({files:[datei], title:'Vorleser-Vokabeln'});
+      melde('In „Dateien" → iCloud Drive → Scriptable sichern');
+      return;
+    }
+  }catch(e){ if(e && e.name === 'AbortError') return; }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(datei);
+  a.download = 'vorleser-vokabeln.json'; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  melde('Datei in iCloud Drive → Scriptable ablegen');
+}
+$('bWidget').onclick = widgetExport;
 
 function zeigeStimmenListe(){
   $('sheetTitel').textContent = 'Stimmen in diesem Browser';
@@ -4183,6 +4214,9 @@ function standAnbieten(){
   el.weiter.dataset.von = s.von || '';
   el.weiter.dataset.bis = s.bis || '';
   el.weiter.dataset.seite = s.seite || '';
+  // nicht erst fragen — sofort an die letzte Stelle
+  $('bWeiter').onclick();
+  setTimeout(() => melde('Weiter auf Seite ' + s.seite + ' — ' + pct + ' %'), 300);
 }
 
 $('bWeiter').onclick = () => {
@@ -4441,21 +4475,21 @@ function stelleSichtbar(){
   return r.bottom > box.top && r.top < box.bottom;
 }
 function knopfPruefen(){
-  const zeigen = units.length && userScrolled && !stelleSichtbar();
-  $('bZurStelle').hidden = !zeigen;
+  // fest sichtbar, sobald ein Buch offen ist
+  $('bZurStelle').hidden = !units.length;
 }
-let pruefUhr = null;
+let pruefUhr = null, letzterHandScroll = 0;
 function handScroll(){
   if(scrollLock) return;
   const pos = handy ? window.scrollY : el.scroller.scrollTop;
   if(zielScroll !== null && Math.abs(pos - zielScroll) < 80) return;   // das waren wir
   userScrolled = true;
+  letzterHandScroll = Date.now();
   clearTimeout(pruefUhr);
   pruefUhr = setTimeout(knopfPruefen, 150);
 }
 $('bZurStelle').onclick = () => {
   userScrolled = false;
-  $('bZurStelle').hidden = true;
   const m = el.doc.querySelector('.sent.now');
   if(m) scrollTo(m);
 };
@@ -4536,16 +4570,43 @@ if(iOS){
 /* ══ Sperrbildschirm-Steuerung ═══════════════════════════════ */
 audio.setAttribute('playsinline', '');
 
+let vokSperr = true;
+try{ vokSperr = localStorage.getItem('vorleser.vokSperr') !== '0'; }catch(e){}
+$('bVokSperr').setAttribute('aria-pressed', String(vokSperr));
+$('bVokSperr').onclick = () => {
+  vokSperr = !vokSperr;
+  try{ localStorage.setItem('vorleser.vokSperr', vokSperr ? '1' : '0'); }catch(e){}
+  $('bVokSperr').setAttribute('aria-pressed', String(vokSperr));
+  sperrbildschirm();
+  melde(vokSperr ? 'Vokabeln wechseln auf dem Sperrbildschirm' : 'Sperrbildschirm zeigt nur das Buch');
+};
+
+/* Wechselt alle 20 Sekunden zur nächsten Vokabel */
+function sperrVokabel(){
+  if(!vokSperr || !vokabeln.length) return null;
+  const v = vokabeln[Math.floor(Date.now() / 20000) % vokabeln.length];
+  if(!v) return null;
+  const bedeutung = v.uebersetzung || '';
+  const erkl = v.im_satz_de || v.erklaerung_de || '';
+  return { zeile1: v.wort + (bedeutung ? ' — ' + bedeutung : ''), zeile2: erkl };
+}
+let sperrLetzte = '';
+setInterval(() => { if(mode === 'playing') sperrbildschirm(); }, 5000);
+
 function sperrbildschirm(){
   if(!('mediaSession' in navigator) || !units.length) return;
   const buch = buchTitel();
   const u = units[idx];
   try{
-    navigator.mediaSession.metadata = new MediaMetadata({
-      title: buch,
-      artist: u ? 'Seite ' + u.page : '',
-      album: 'Vorleser'
-    });
+    const vok = sperrVokabel();
+    const meta = vok
+      ? { title: vok.zeile1, artist: vok.zeile2 || buch, album: buch + (u ? ' · Seite ' + u.page : '') }
+      : { title: buch, artist: u ? 'Seite ' + u.page : '', album: 'Vorleser' };
+    const schluessel = JSON.stringify(meta);
+    if(schluessel !== sperrLetzte){
+      sperrLetzte = schluessel;
+      navigator.mediaSession.metadata = new MediaMetadata(meta);
+    }
     if(!sperrbildschirm.fertig){ sperrbildschirm.fertig = true;
     navigator.mediaSession.setActionHandler('play', () => {
       if(mode === 'paused') resume(); else if(mode === 'idle') play(idx);
