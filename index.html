@@ -919,7 +919,7 @@
 (function(){
 "use strict";
 
-const APP_VERSION = 'v67';
+const APP_VERSION = 'v68';
 
 /* ══ Elemente ═══════════════════════════════════════════ */
 const $ = id => document.getElementById(id);
@@ -3187,6 +3187,12 @@ function zeigeSammlung(reiter){
   };
   if(sammlungReiter === 'vokabeln'){
     mitKnopf('Teilen', () => sammlungTeilen('vokabeln'), 'Als Text in Notizen, WhatsApp, Mail …');
+    const offen = vokOhneErklaerung().length;
+    if(offen && gKeyWert){
+      const b = mitKnopf(nachholLaeuft ? 'Nachholen läuft …' : 'Erklärungen nachholen · ' + offen, erklaerungenNachholen,
+        'Holt Erklärung, Lesung und Korrektur für alle Wörter ohne Erklärung — im Hintergrund');
+      b.style.borderColor = 'var(--marker-deep)'; b.style.color = 'var(--marker-deep)';
+    }
     mitKnopf('Anki', vokAnki, 'Lernkarten-Datei für Anki (Vorderseite · Rückseite)');
     mitKnopf('Mitnehmen', vokJsonSichern, 'Alles als Datei — aufs andere Gerät, dort „Einspielen"');
     mitKnopf('Einspielen', vokEinspielen, 'Gesicherte Vokabeln dazuladen (ohne Doppelte)');
@@ -3269,7 +3275,12 @@ function vokabelKarte(v, i){
   if(!v.erklaerung_de){
     const hinweis = document.createElement('div');
     hinweis.style.cssText = 'font-size:12px;color:#9A6B2A;margin-top:4px';
-    hinweis.textContent = 'ohne Erklärung — antippen zum Nachholen';
+    hinweis.textContent = nachholLaeuft ? 'Erklärung wird nachgeholt …' : 'ohne Erklärung — antippen oder oben „Erklärungen nachholen"';
+    d.appendChild(hinweis);
+  } else if(v.korrigiert && v.uebersetzung_google){
+    const hinweis = document.createElement('div');
+    hinweis.style.cssText = 'font-size:12px;color:#8E8878;margin-top:4px';
+    hinweis.textContent = 'korrigiert — Google hatte „' + v.uebersetzung_google + '"';
     d.appendChild(hinweis);
   }
   const f = document.createElement('div'); f.className = 'mark__foot';
@@ -4357,12 +4368,15 @@ try{
   bisherAuto = localStorage.getItem('vorleser.bisherauto') !== '0';
 }catch(e){}
 
-async function erklaeren(wort, kontext, quelle, jap){
+async function erklaeren(wort, kontext, quelle, jap, google){
   if(!gKeyWert) return null;
   let prompt = 'Wort: "' + wort + '" (Sprache ' + (quelle || 'unbekannt') + ').\n'
     + 'Textstelle, in der es steht: "' + kontext.replace(/"/g, "'") + '".\n'
+    + (google ? 'Google Translate hat es mit "' + String(google).replace(/"/g, "'") + '" übersetzt.\n' : '')
     + 'Antworte NUR mit JSON, ohne Erklärung davor oder danach:\n'
-    + '{"im_satz_de":"ein Satz auf Deutsch: was das Wort GENAU IN DIESER TEXTSTELLE ausdrückt, '
+    + '{' + (google ? '"google_ok":true oder false — stimmt die Google-Übersetzung für DIESE Textstelle? (false auch, wenn sie das Wort einfach unübersetzt lässt oder ein anderes Wort trifft, z. B. plummily -> Pflaume),'
+    + '"besser":"nur wenn google_ok false: die richtige kurze Übersetzung, 1 bis 3 Wörter, sonst leer",' : '')
+    + '"im_satz_de":"ein Satz auf Deutsch: was das Wort GENAU IN DIESER TEXTSTELLE ausdrückt, '
     + 'mit Bezug auf die konkrete Situation dort — keine allgemeine Definition",'
     + '"erklaerung_de":"die allgemeine Bedeutung des Wortes in einem Satz",'
     + '"erklaerung_en":"the general meaning in one English sentence",';
@@ -4376,7 +4390,63 @@ async function erklaeren(wort, kontext, quelle, jap){
       + ' in Hiragana, bei Fremdwörtern in Katakana, keine Romaji"';
   }
   prompt += '}';
-  return geminiJSON(prompt, beispiele ? 1500 : 700);
+  return geminiJSON(prompt, beispiele ? 1500 : 800);
+}
+
+/* Trägt eine Gemini-Antwort in einen Vokabeleintrag ein — inklusive
+   Korrektur, wenn Google daneben lag (die Google-Fassung bleibt gemerkt) */
+function erklaerungUebernehmen(daten, erk){
+  if(!erk) return false;
+  ['im_satz_de','erklaerung_de','erklaerung_en','beispiel_de','beispiel_en','aussprache']
+    .forEach(k => { if(erk[k]) daten[k] = String(erk[k]); });
+  if(erk.kana && !daten.kana) daten.kana = String(erk.kana);
+  if(erk.google_ok === false && erk.besser && String(erk.besser).trim()){
+    daten.uebersetzung_google = daten.uebersetzung || '';
+    daten.uebersetzung = String(erk.besser).trim();
+    daten.korrigiert = true;
+  }
+  return true;
+}
+
+/* Fehlende Erklärungen für alle Vokabeln nachholen — läuft im Hintergrund,
+   auch während vorgelesen wird, ein Wort nach dem anderen. */
+let nachholLaeuft = false;
+function vokOhneErklaerung(){ return vokabeln.filter(v => v && v.wort && !v.erklaerung_de); }
+async function erklaerungenNachholen(){
+  if(nachholLaeuft) { melde('Läuft schon'); return; }
+  if(!gKeyWert){ melde('Dafür braucht es den Gemini-Schlüssel'); return; }
+  const offen = vokOhneErklaerung();
+  if(!offen.length){ melde('Alle Wörter haben schon eine Erklärung'); return; }
+  nachholLaeuft = true;
+  let n = 0, fehler = 0, korrigiert = 0;
+  melde(offen.length + ' Wörter werden nachgeholt — du kannst weiterhören');
+  for(const v of offen){
+    try{
+      if(!v.uebersetzung && uebKey()){
+        try{ v.uebersetzung = (await uebersetzen(v.wort, v.ziel || 'de')).text; }catch(e){}
+      }
+      if(japanisch && !v.japanisch && uebKey()){
+        try{ v.japanisch = (await uebersetzen(v.wort, 'ja')).text; }catch(e){}
+      }
+      const erk = await erklaeren(v.wort, v.kontext || '', v.quelle, v.japanisch, v.uebersetzung);
+      if(erk){ erklaerungUebernehmen(v, erk); n++; if(v.korrigiert) korrigiert++; } else fehler++;
+      if(v.japanisch && !(Array.isArray(v.kanji) && v.kanji.length && v.kanji[0].teile)){
+        try{
+          const k = await kanjiHolen(v.japanisch);
+          if(k){ if(k.kana) v.kana = String(k.kana); if(Array.isArray(k.kanji)) v.kanji = k.kanji.filter(x => x && x.zeichen); }
+        }catch(e){}
+      }
+      vokSichern();
+      if((n + fehler) % 3 === 0) melde((n + fehler) + ' / ' + offen.length + ' …');
+      // Sammlung offen? Dann Liste frisch zeichnen
+      if(!el.sheet.hidden && $('sheetTitel').textContent === 'Sammlung' && sammlungReiter === 'vokabeln') zeigeSammlung();
+    }catch(e){ fehler++; }
+    if(fehler >= 3 && n === 0){ melde('Abgebrochen — ' + (geminiGrund || 'Gemini antwortet nicht')); break; }
+    await new Promise(r => setTimeout(r, 400));
+  }
+  nachholLaeuft = false;
+  melde(n + ' Wörter ergänzt' + (korrigiert ? ', ' + korrigiert + ' Übersetzung' + (korrigiert > 1 ? 'en' : '') + ' korrigiert' : '') + (fehler ? ', ' + fehler + ' fehlgeschlagen' : ''));
+  if(!el.sheet.hidden && $('sheetTitel').textContent === 'Sammlung') zeigeSammlung();
 }
 
 /* Kanji-Aufschlüsselung sofort: Lesung des ganzen Wortes, jedes Kanji einzeln
@@ -4597,9 +4667,9 @@ function wortKarte(t, gespeichert, vonSammlung){
     }catch(e){}
   };
   const erklaerungEintragen = erk => {
-    ['im_satz_de','erklaerung_de','erklaerung_en','beispiel_de','beispiel_en','aussprache']
-      .forEach(k => { if(erk[k]) daten[k] = String(erk[k]); });
-    if(erk.kana && !daten.kana) daten.kana = String(erk.kana);
+    const vorher = daten.uebersetzung;
+    erklaerungUebernehmen(daten, erk);
+    if(daten.korrigiert && daten.uebersetzung !== vorher) melde('Übersetzung korrigiert: ' + daten.uebersetzung);
   };
 
   if(gespeichert){
@@ -4616,7 +4686,7 @@ function wortKarte(t, gespeichert, vonSammlung){
           daten.uebersetzung = ue.text;
         }
         kanjiNach();
-        const erk = await erklaeren(daten.wort, daten.kontext || '', daten.quelle, daten.japanisch);
+        const erk = await erklaeren(daten.wort, daten.kontext || '', daten.quelle, daten.japanisch, daten.uebersetzung);
         w0.remove();
         if(erk){
           erklaerungEintragen(erk);
@@ -4660,7 +4730,7 @@ function wortKarte(t, gespeichert, vonSammlung){
       }
       const w2 = document.createElement('div'); w2.className = 'wort__warte';
       if(gKeyWert){ w2.textContent = beispiele ? 'Erklärung und Beispiele werden geholt …' : 'Erklärung wird geholt …'; inhalt.appendChild(w2); }
-      const erk = await erklaeren(daten.wort, daten.kontext, daten.quelle, daten.japanisch);
+      const erk = await erklaeren(daten.wort, daten.kontext, daten.quelle, daten.japanisch, daten.uebersetzung);
       w2.remove();
       if(erk){
         erklaerungEintragen(erk);
