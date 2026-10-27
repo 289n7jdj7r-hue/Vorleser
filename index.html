@@ -164,7 +164,8 @@
   .dunkel{background:none;border:1px solid #CFC9BC;border-radius:7px;padding:8px 13px;
     font-family:var(--font-mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;
     color:#6B6558;cursor:pointer}
-  .dunkel:hover{border-color:var(--petrol);color:var(--petrol)}
+  .dunkel:hover,.dunkel.aktiv{border-color:var(--petrol);color:var(--petrol)}
+  html.nacht .dunkel.aktiv{border-color:var(--petrol-light);color:var(--petrol-light)}
 
   .weiter{
     position:absolute;top:0;left:0;right:0;z-index:6;
@@ -473,6 +474,66 @@
     .scroller{scroll-behavior:auto}
     *{transition-duration:.01ms !important}
   }
+
+  /* ── Nachtansicht ─────────────────────────────────────────
+     Grundlage: Die lichtempfindlichen Ganglienzellen der Netzhaut (ipRGC),
+     die den Melatonin-Rhythmus steuern, reagieren am stärksten auf
+     Blau um 480 nm (Brainard 2001, Thapan 2001, Cajochen 2011). Darum:
+     warmes, bernsteinfarbenes Licht statt Blau/Weiß, und ein dunkler,
+     warmer Grund statt Schwarz. Reines Weiß auf Schwarz (21:1) erzeugt
+     Lichthöfe und ermüdet (Buchner/Baumgartner 2007, Piepenbrock 2013);
+     gewählt ist ein Kontrast um 9–10:1 (WCAG AAA ist 7:1) — gut lesbar,
+     aber ohne Blendung. Die Vorlesestelle bleibt durch Bernstein
+     hervorgehoben, nicht durch Helligkeit: der Fokus bleibt. */
+  html.nacht{
+    --paper:#15110D;          /* warmes Dunkelbraun, Lum. ≈ 4 % */
+    --paper-2:#1E1813;
+    --ink:#E3D3B4;            /* warmes Beige, Lum. ≈ 66 %  →  ≈ 9.8:1 */
+    --ink-soft:#B9A98B;
+    --marker-soft:#3C2C0E;
+    --marker-deep:#D9A53A;
+  }
+  html.nacht .wort__ueb,html.nacht .bisher .zuletzt{color:var(--petrol-light)}
+  html.nacht .dunkel:hover,html.nacht .figur:hover{border-color:var(--petrol-light);color:var(--petrol-light)}
+  html.nacht .stage,html.nacht .center{background:var(--paper)}
+  html.nacht .doc p{font-weight:400}
+  html.nacht .sent.now{color:#F2E6CB;background:var(--marker-soft);
+    box-shadow:-4px 0 0 0 var(--marker),4px 0 0 0 var(--marker-soft)}
+  html.nacht .sent .w.on{background:#8A6418;box-shadow:0 0 0 1px #8A6418;color:#FFF4DC}
+  html.nacht .abs{opacity:.72}
+  html.nacht .abs.done,html.nacht .sent.done{opacity:.38}
+  html.nacht .pagemark::before,html.nacht .pagemark::after{background:#3A3129}
+  html.nacht .spine{border-right-color:#2A231C}
+  html.nacht .spine__rail{background:#3A3129}
+  html.nacht .figur{border-color:#4A3F33;color:#A89D8C}
+  html.nacht .sheet__top{border-bottom-color:#3A3129}
+  html.nacht .mark{background:#1F1912}
+  html.nacht .vok{background:#17201F}
+  html.nacht .wort__text,html.nacht .kanji span{color:#D9CCB4}
+  html.nacht .wort__text i,html.nacht .wort__jp small{color:#A89D8C}
+  html.nacht .kanji{border-bottom-color:#3A3129}
+  html.nacht .dunkel{border-color:#4A3F33;color:#BBAE95}
+  html.nacht .sheet__leer,html.nacht .card p{color:#A89D8C}
+  html.nacht .weiter{color:#E6D3A0;border-bottom-color:#4A3A14}
+  html.nacht .weiter .dunkel{border-color:#6A5422;color:#E6D3A0}
+  html.nacht .alert{background:#2A2415;border-color:#5A4A22;color:#E6D3A0}
+  html.nacht .stoerung{background:#2E1C16;border-bottom-color:#5A342A;color:#F0C8BA}
+  html.nacht #abschnitt{background:#16252A !important;border-bottom-color:#2A444A !important;color:#BFE0E4 !important}
+  html.nacht #abschnitt .dunkel{border-color:#2A444A !important;color:#BFE0E4 !important}
+  html.nacht textarea{background:#1E1813 !important;border-color:#3A3129 !important;color:var(--ink) !important}
+  html.nacht .mark__foot,html.nacht .mark__foot button{color:#9A8F7C}
+  html.nacht .galerie figcaption{color:#BBAE95}
+  html.nacht .bar{background:#3A3129}
+  html.nacht .doc{-webkit-font-smoothing:antialiased}
+
+  /* Stille Lesespur: Wort für Wort weiter, ohne Ton */
+  .spur{font-family:var(--font-mono);font-size:9.5px;letter-spacing:.1em;color:#8A90A0;margin-left:4px}
+  .bisher{border-left:3px solid var(--petrol);background:#EEF3F3;border-radius:0 7px 7px 0;
+    padding:12px 15px;margin:10px 0;font-family:var(--font-read);font-size:15.5px;line-height:1.62}
+  .bisher b{display:block;font-family:var(--font-mono);font-size:9.5px;letter-spacing:.14em;
+    text-transform:uppercase;color:#8E8878;font-weight:500;margin-bottom:6px}
+  .bisher .zuletzt{margin-top:8px;color:var(--petrol);font-style:italic}
+  html.nacht .bisher{background:#17201F}
 </style>
 </head>
 <body>
@@ -597,6 +658,22 @@
           <button class="ghost" id="bTitelei" aria-pressed="true" hidden>Titelei überspringen</button>
           <button class="ghost" id="bAnfang">Zum Textanfang</button>
           <button class="ghost" id="bVokSperr" aria-pressed="true">Vokabeln auf Sperrbildschirm</button>
+          <button class="ghost" id="bNacht" aria-pressed="false" title="Warmes, dunkles Licht für abends">Nachtansicht: aus</button>
+        </span>
+      </div>
+      <div class="field">
+        <label>Stille Lesespur — ohne Ton, der Text läuft im Lesetempo mit</label>
+        <span style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <button class="ghost" id="bStill" aria-pressed="false">Lesespur statt Stimme</button>
+          <span class="chips" id="wpmChips">
+            <button class="chip chip--num" data-wpm="180">180</button>
+            <button class="chip chip--num" data-wpm="220">220</button>
+            <button class="chip chip--num" data-wpm="260" aria-pressed="true">260</button>
+            <button class="chip chip--num" data-wpm="300">300</button>
+            <button class="chip chip--num" data-wpm="350">350</button>
+            <button class="chip chip--num" data-wpm="400">400</button>
+          </span>
+          <span class="spur">Wörter / min</span>
         </span>
       </div>
       <div class="field" style="flex:1 1 100%;border-top:1px solid var(--line);padding-top:14px;margin-top:2px">
@@ -667,8 +744,43 @@
           <button class="ghost" id="bVok" hidden>Vokabeln <span id="vokCount" style="opacity:.6"></span></button>
           <button class="ghost" id="bWidget" title="Datei für das Scriptable-Widget">Vokabeln fürs Widget</button>
         </div>
+        <span style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+          <button class="ghost" id="bAutoVok" aria-pressed="true" title="Jedes nachgeschlagene Wort landet von selbst in den Vokabeln">Nachgeschlagene Wörter automatisch merken</button>
+          <button class="ghost" id="bBeispiele" aria-pressed="false" title="Ohne Beispiele kommt die Erklärung schneller">Beispielsätze dazu</button>
+          <button class="ghost" id="bMitteilung" aria-pressed="false" title="Meldet sich, wenn eine Übersetzung im Hintergrund fertig ist">Mitteilung wenn fertig</button>
+          <button class="ghost" id="bBisherAuto" aria-pressed="true" title="Beim Weiterlesen: kurze Zusammenfassung des zuletzt Gehörten">„Bisher" beim Weiterlesen</button>
+        </span>
         <p id="uStatus" style="margin:10px 0 0;font-family:var(--font-mono);font-size:10px;
            letter-spacing:.1em;color:#697082"></p>
+      </div>
+
+      <div class="field" style="flex:1 1 100%;border-top:1px solid var(--line);padding-top:14px">
+        <label style="color:var(--marker)">Widget-Sync — gemerkte Wörter landen von selbst im Widget (über ein privates GitHub-Gist)</label>
+        <p id="gistKurz" hidden style="margin:8px 0 0;display:flex;gap:12px;align-items:center;flex-wrap:wrap;
+           font-family:var(--font-mono);font-size:11px;letter-spacing:.08em;color:#9AA2B2">
+          <span id="gistKurzText"></span>
+          <button class="ghost" id="gistJetzt" style="padding:5px 10px">jetzt senden</button>
+          <button class="ghost" id="gistIdKopieren" style="padding:5px 10px">Gist-ID kopieren</button>
+          <button class="ghost" id="gistAendern" style="padding:5px 10px">ändern</button>
+        </p>
+        <div id="gistConfig" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:6px">
+          <div class="field">
+            <label for="gistToken">GitHub-Token (Haken nur bei „gist")</label>
+            <input type="password" id="gistToken" placeholder="ghp_…" style="width:210px;
+              font-family:var(--font-ui);font-size:13px;color:var(--paper);
+              background:var(--console-2);border:1px solid var(--line);border-radius:7px;padding:7px 9px">
+          </div>
+          <div class="field">
+            <label for="gistId">Gist-ID (leer lassen — wird angelegt)</label>
+            <input type="text" id="gistId" placeholder="automatisch" style="width:210px;
+              font-family:var(--font-ui);font-size:13px;color:var(--paper);
+              background:var(--console-2);border:1px solid var(--line);border-radius:7px;padding:7px 9px">
+          </div>
+          <button class="ghost" id="gistVerbinden">Verbinden</button>
+          <button class="ghost" id="gistAus" hidden>Sync aus</button>
+        </div>
+        <p id="gistStatus" style="margin:10px 0 0;font-family:var(--font-mono);font-size:10px;
+           letter-spacing:.1em;color:#697082">Token: github.com → Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token → nur „gist" ankreuzen.</p>
       </div>
 
       <div class="field">
@@ -807,7 +919,7 @@
 (function(){
 "use strict";
 
-const APP_VERSION = 'v65';
+const APP_VERSION = 'v67';
 
 /* ══ Elemente ═══════════════════════════════════════════ */
 const $ = id => document.getElementById(id);
@@ -1608,7 +1720,9 @@ function paint(){
   el.spineHead.style.top = 'calc(22px + ' + pct + ' * (100% - 44px))';
   el.spineFill.style.height = 'calc(' + pct + ' * (100% - 44px))';
 
-  const mins = Math.max(1, Math.round((units.length - idx) * 0.9 / (155 * tempo) * 10));
+  const mins = stillAn
+    ? Math.max(1, Math.round((units.length - idx) * 14 / stillWpm))
+    : Math.max(1, Math.round((units.length - idx) * 0.9 / (155 * tempo) * 10));
   el.counters.innerHTML = 'Satz <b>' + (idx+1) + '/' + units.length + '</b><span class="dot">·</span>' +
     'Seite <b>' + (units[idx] ? units[idx].page : '—') + '</b><span class="dot">·</span>' +
     '<b>' + Math.round(idx / Math.max(1, units.length - 1) * 100) + ' %</b>' +
@@ -2016,7 +2130,9 @@ function play(from){
   lautstaerkeZuruecksetzen();
   mode = 'playing';
   paint(); icons();
-  if(wolkeAn()) wolkeSpiel(my);
+  stillHalt();
+  if(stillAn) stillSpiel(my);
+  else if(wolkeAn()) wolkeSpiel(my);
   else setTimeout(()=>speakAt(my), 60); // Chrome braucht Luft nach cancel()
 }
 
@@ -2044,15 +2160,18 @@ function pause(){
   mode = 'paused';
   standSichern(true);
   selbstPausiert = true;
-  selbstPausiert = true;
-  if(wolkeAn()){ try{ audio.pause(); }catch(e){} }
+  stillHalt();
+  if(stillAn){ /* nur die Uhren anhalten */ }
+  else if(wolkeAn()){ try{ audio.pause(); }catch(e){} }
   else { try{ synth.pause(); }catch(e){} }
   setTimeout(() => { selbstPausiert = false; }, 250);
   icons();
+  updatePruefen();
 }
 function resume(){
   schlafWeiter();
   if(mode !== 'paused') return;
+  if(stillAn){ play(idx); return; }          // Satz von vorn, Markierung läuft weiter
   mode = 'playing';
   icons();
   if(wolkeAn()){ audio.play().catch(()=>play(idx)); return; }
@@ -2064,12 +2183,14 @@ function stop(){
   mode = 'idle';
   standSichern(true);
   selbstPausiert = true;
+  stillHalt();
   try{ synth.cancel(); }catch(e){}
   try{ audio.pause(); }catch(e){}
   setTimeout(() => { selbstPausiert = false; }, 250);
   icons();
   const cur = el.doc.querySelector('.sent.now');
   if(cur) cur.querySelectorAll('.w.on').forEach(w=>w.classList.remove('on'));
+  updatePruefen();
 }
 function jump(to, keepPlaying){
   idx = Math.max(0, Math.min(units.length-1, to));
@@ -2593,6 +2714,90 @@ $('bTitelei').onclick = () => {
 };
 ueberspringeTitelei = true;   // Titelei wird immer übersprungen
 
+/* ══ Nachtansicht ════════════════════════════════════════
+   aus · an · auto (21–7 Uhr). Warmes Bernstein statt Blau, dunkler
+   warmer Grund, Kontrast um 9:1 — siehe Begründung im CSS. */
+let nacht = 'aus';
+try{ nacht = localStorage.getItem('vorleser.nacht') || 'aus'; }catch(e){}
+function nachtIstJetzt(){
+  if(nacht === 'an') return true;
+  if(nacht !== 'auto') return false;
+  const h = new Date().getHours();
+  return h >= 21 || h < 7;
+}
+function nachtAnwenden(){
+  document.documentElement.classList.toggle('nacht', nachtIstJetzt());
+  const b = $('bNacht');
+  b.textContent = 'Nachtansicht: ' + (nacht === 'an' ? 'an' : nacht === 'auto' ? 'auto 21–7 Uhr' : 'aus');
+  b.setAttribute('aria-pressed', String(nachtIstJetzt()));
+}
+$('bNacht').onclick = () => {
+  nacht = nacht === 'aus' ? 'an' : nacht === 'an' ? 'auto' : 'aus';
+  try{ localStorage.setItem('vorleser.nacht', nacht); }catch(e){}
+  nachtAnwenden();
+  melde(nacht === 'an' ? 'Nachtansicht an — warmes Licht, weniger Blau'
+      : nacht === 'auto' ? 'Nachtansicht automatisch von 21 bis 7 Uhr' : 'Tagansicht');
+};
+nachtAnwenden();
+setInterval(nachtAnwenden, 60000);
+
+/* ══ Stille Lesespur ═════════════════════════════════════
+   Kein Ton. Die Markierung wandert Wort für Wort im eingestellten
+   Lesetempo weiter, die gelesenen Absätze werden abgedunkelt — die
+   Augen folgen, ohne selbst zu tippen. Das Tempo hier ist unabhängig
+   vom Sprechtempo und wird gemerkt. */
+let stillAn = false, stillWpm = 260, stillUhr = null, stillEnde = null;
+try{
+  const s = JSON.parse(localStorage.getItem('vorleser.lesespur') || '{}');
+  stillAn = !!s.an; if(s.wpm) stillWpm = parseInt(s.wpm, 10) || 260;
+}catch(e){}
+function stillSichern(){
+  try{ localStorage.setItem('vorleser.lesespur', JSON.stringify({an:stillAn, wpm:stillWpm})); }catch(e){}
+}
+function stillZeigen(){
+  $('bStill').setAttribute('aria-pressed', String(stillAn));
+  document.querySelectorAll('[data-wpm]').forEach(b =>
+    b.setAttribute('aria-pressed', String(parseInt(b.dataset.wpm, 10) === stillWpm)));
+}
+function stillHalt(){ clearTimeout(stillUhr); clearTimeout(stillEnde); stillUhr = stillEnde = null; }
+function stillSpiel(my){
+  if(my !== gen) return;
+  if(idx >= units.length){ stop(); return; }
+  const cur = el.doc.querySelector('.sent.now');
+  const ws = cur ? Array.from(cur.querySelectorAll('.w')) : [];
+  const n = Math.max(1, ws.length || units[idx].text.split(/\s+/).filter(Boolean).length);
+  // Satzdauer aus Wörtern je Minute, dazu eine kurze Atempause am Satzende
+  const dauer = Math.max(450, Math.round(n / stillWpm * 60000)) + 160;
+  const proWort = (dauer - 160) / n;
+  let k = 0;
+  const tick = () => {
+    if(my !== gen || mode !== 'playing') return;
+    if(k < ws.length){ markWord(parseInt(ws[k].dataset.at, 10)); k++; stillUhr = setTimeout(tick, proWort); }
+  };
+  tick();
+  stillEnde = setTimeout(() => {
+    if(my !== gen || mode !== 'playing') return;
+    idx++;
+    if(idx < units.length){ paint(); stillSpiel(my); } else stop();
+  }, dauer);
+}
+$('bStill').onclick = () => {
+  stillAn = !stillAn;
+  stillSichern(); stillZeigen();
+  melde(stillAn ? 'Lesespur: nur Markierung, kein Ton — ' + stillWpm + ' Wörter/min'
+                : 'Wieder mit Stimme');
+  if(mode === 'playing') play(idx);
+};
+document.querySelectorAll('[data-wpm]').forEach(b => {
+  b.onclick = () => {
+    stillWpm = parseInt(b.dataset.wpm, 10) || 260;
+    stillSichern(); stillZeigen();
+    if(units.length) paint();
+    if(stillAn && mode === 'playing') play(idx);
+  };
+});
+stillZeigen();
+
 /* Startbild: ein klassisches Charakterporträt aus deinen Serien,
    bei jedem Öffnen ein anderes. Quelle: MyAnimeList-Datenbank. */
 const SERIEN = [
@@ -2965,13 +3170,30 @@ function zeigeSammlung(reiter){
   [['saetze','Sätze',marken.length],['vokabeln','Vokabeln',vokabeln.length]].forEach(([id,name,n]) => {
     const b = document.createElement('button'); b.className = 'dunkel';
     b.textContent = name + (n ? ' · ' + n : '');
-    if(sammlungReiter === id){ b.style.borderColor = 'var(--petrol)'; b.style.color = 'var(--petrol)'; }
+    if(sammlungReiter === id)b.classList.add('aktiv');
     b.onclick = () => zeigeSammlung(id);
     leiste.appendChild(b);
   });
   const alle = document.createElement('button'); alle.className = 'dunkel'; alle.style.marginLeft = 'auto';
   leiste.appendChild(alle);
   el.sheetList.appendChild(leiste);
+
+  // Mitnehmen: aufs andere Gerät, in Notizen, nach Anki — und wieder einspielen
+  const mit = document.createElement('div');
+  mit.style.cssText = 'display:flex;gap:8px;margin:0 0 6px;flex-wrap:wrap;align-items:center';
+  const mitKnopf = (text, fn, titel) => {
+    const b = document.createElement('button'); b.className = 'dunkel'; b.textContent = text;
+    if(titel) b.title = titel; b.onclick = fn; mit.appendChild(b); return b;
+  };
+  if(sammlungReiter === 'vokabeln'){
+    mitKnopf('Teilen', () => sammlungTeilen('vokabeln'), 'Als Text in Notizen, WhatsApp, Mail …');
+    mitKnopf('Anki', vokAnki, 'Lernkarten-Datei für Anki (Vorderseite · Rückseite)');
+    mitKnopf('Mitnehmen', vokJsonSichern, 'Alles als Datei — aufs andere Gerät, dort „Einspielen"');
+    mitKnopf('Einspielen', vokEinspielen, 'Gesicherte Vokabeln dazuladen (ohne Doppelte)');
+  } else {
+    mitKnopf('Teilen', () => sammlungTeilen('saetze'), 'Als Text in Notizen, WhatsApp, Mail …');
+  }
+  el.sheetList.appendChild(mit);
 
   const liste = sammlungReiter === 'saetze' ? marken : vokabeln;
   if(!liste.length){
@@ -3060,39 +3282,131 @@ function vokabelKarte(v, i){
   const w = document.createElement('button'); w.textContent = 'Löschen';
   w.onclick = ev => { ev.stopPropagation(); vokabeln.splice(i, 1); vokSichern(); zeigeSammlung(); };
   f.appendChild(w); d.appendChild(f);
-  d.onclick = () => wortKarte({wort:v.wort, kontext:v.kontext||'', idx:v.idx||0}, v);
+  d.onclick = () => wortKarte({wort:v.wort, kontext:v.kontext||'', idx:v.idx||0}, v, true);
   return d;
 }
 
 function vokabelnExport(){
   if(!vokabeln.length){ melde('Nichts zu sichern'); return; }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([vokabelnText()], {type:'text/plain;charset=utf-8'}));
+  a.download = 'vokabeln.txt'; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+
+function vokabelnText(){
   let out = 'Vokabeln\n\n';
   vokabeln.forEach(v => {
-    out += v.wort + ' — ' + v.uebersetzung + (v.japanisch ? ' — ' + v.japanisch + (v.kana ? ' ' + v.kana : '') : '') + '\n';
+    out += v.wort + ' — ' + (v.uebersetzung || '') + (v.japanisch ? ' — ' + v.japanisch + (v.kana ? ' ' + v.kana : '') : '') + '\n';
     if(v.im_satz_de) out += '  Im Satz: ' + v.im_satz_de + '\n';
     if(v.erklaerung_de) out += '  ' + v.erklaerung_de + '\n';
     if(v.beispiel_de) out += '  „' + v.beispiel_de + '"\n';
     if(v.beispiel_en) out += '  "' + v.beispiel_en + '"\n';
     out += '  (' + v.buch + ', Seite ' + v.seite + ')\n\n';
   });
+  return out;
+}
+function markenText(){
+  let out = 'Gemerkte Sätze\n\n';
+  const buecher = {};
+  marken.forEach(m => { (buecher[m.buch] = buecher[m.buch] || []).push(m); });
+  Object.keys(buecher).forEach(n => {
+    out += '\n## ' + n + '\n\n';
+    buecher[n].forEach(m => { out += '- „' + m.satz + '" (Seite ' + m.seite + ')\n'; });
+  });
+  return out;
+}
+
+/* Datei weitergeben: zuerst das Teilen-Blatt (Dateien, Notizen, AirDrop …),
+   sonst normaler Download */
+async function dateiWeitergeben(name, inhalt, typ, hinweis){
+  const datei = new File([inhalt], name, {type: typ || 'text/plain;charset=utf-8'});
+  try{
+    if(navigator.canShare && navigator.canShare({files:[datei]})){
+      await navigator.share({files:[datei], title:name});
+      if(hinweis) melde(hinweis);
+      return;
+    }
+  }catch(e){ if(e && e.name === 'AbortError') return; }
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([out], {type:'text/plain;charset=utf-8'}));
-  a.download = 'vokabeln.txt'; a.click();
+  a.href = URL.createObjectURL(datei);
+  a.download = name; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  if(hinweis) melde(hinweis);
+}
+
+/* Sammlung als Text teilen — Notizen, WhatsApp, Mail; Rückfall: Zwischenablage */
+async function sammlungTeilen(was){
+  const text = was === 'saetze' ? markenText() : vokabelnText();
+  if((was === 'saetze' ? marken : vokabeln).length === 0){ melde('Noch nichts da'); return; }
+  try{
+    if(navigator.share){ await navigator.share({ title: was === 'saetze' ? 'Gemerkte Sätze' : 'Vokabeln', text }); return; }
+  }catch(e){ if(e && e.name === 'AbortError') return; }
+  try{ await navigator.clipboard.writeText(text); melde('In die Zwischenablage kopiert'); }
+  catch(e){ melde('Teilen hier nicht möglich'); }
+}
+
+/* Anki: Tab-getrennt, eine Karte je Zeile — in Anki über „Datei → Importieren" */
+function vokAnki(){
+  if(!vokabeln.length){ melde('Noch keine Vokabeln'); return; }
+  const esc = s => String(s || '').replace(/\t/g, ' ').replace(/\r?\n/g, ' ');
+  let out = '#separator:tab\n#html:true\n#columns:Vorderseite\tRückseite\tTags\n';
+  vokabeln.forEach(v => {
+    const vorn = esc(v.wort) + (v.aussprache ? ' <span style="color:#777">[' + esc(v.aussprache) + ']</span>' : '');
+    let hinten = '<b>' + esc(v.uebersetzung) + '</b>';
+    if(v.japanisch) hinten += '<br>' + esc(v.japanisch) + (v.kana ? ' ' + esc(v.kana) : '');
+    if(v.im_satz_de) hinten += '<br><i>' + esc(v.im_satz_de) + '</i>';
+    else if(v.erklaerung_de) hinten += '<br><i>' + esc(v.erklaerung_de) + '</i>';
+    if(v.kontext) hinten += '<br><span style="color:#777">„' + esc(v.kontext.trim()) + '"</span>';
+    hinten += '<br><small>' + esc(v.buch) + ', S. ' + esc(v.seite) + '</small>';
+    const tag = 'vorleser ' + esc(v.buch).replace(/\s+/g, '_').replace(/[^\p{L}\p{N}_-]/gu, '');
+    out += vorn + '\t' + hinten + '\t' + tag + '\n';
+  });
+  dateiWeitergeben('vorleser-anki.txt', out, 'text/plain;charset=utf-8',
+    'In Anki: Datei → Importieren → vorleser-anki.txt');
+}
+
+/* Alles mitnehmen: vollständige Vokabeln als JSON — und auf dem anderen Gerät „Einspielen" */
+function vokJsonSichern(){
+  if(!vokabeln.length){ melde('Noch keine Vokabeln'); return; }
+  const text = JSON.stringify({ app: APP_VERSION, art: 'vorleser-vokabeln', wann: new Date().toISOString(),
+    vokabeln: vokabeln.map(v => { const k = Object.assign({}, v); delete k._gemerkt; return k; }) }, null, 1);
+  dateiWeitergeben('vorleser-vokabeln-' + new Date().toISOString().slice(0,10) + '.json', text,
+    'application/json', 'Gesichert — auf dem anderen Gerät mit „Einspielen" laden');
+}
+function vokEinspielen(){
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'application/json,.json,text/plain,.txt';
+  inp.onchange = async e => {
+    const f = e.target.files && e.target.files[0];
+    if(!f) return;
+    try{
+      const d = JSON.parse(await f.text());
+      let liste = Array.isArray(d) ? d : (d.vokabeln || (d.werte && JSON.parse(d.werte[VOK_SPEICHER] || '[]')) || []);
+      if(!Array.isArray(liste)) throw new Error('keine Vokabelliste');
+      const da = new Set(vokabeln.map(v => (v.wort || '').toLowerCase()));
+      let n = 0;
+      liste.forEach(v => {
+        if(!v || !v.wort) return;
+        const k = v.wort.toLowerCase();
+        if(da.has(k)) return;
+        da.add(k);
+        delete v._gemerkt;
+        vokabeln.push(v); n++;
+      });
+      vokabeln.sort((a, b) => (b.wann || '').localeCompare(a.wann || ''));
+      vokSichern();
+      zeigeSammlung('vokabeln');
+      melde(n ? n + ' Vokabeln dazugekommen' : 'Nichts Neues — alles schon drin');
+    }catch(err){ stoerung('Datei konnte nicht gelesen werden: ' + (err.message || err)); }
+  };
+  inp.click();
 }
 
 /* Datei für das Scriptable-Widget: in iCloud Drive → Scriptable sichern */
 async function widgetExport(){
   if(!vokabeln.length){ melde('Noch keine Vokabeln gemerkt'); return; }
-  const liste = vokabeln.map(v => ({
-    wort: v.wort || '', uebersetzung: v.uebersetzung || '', aussprache: v.aussprache || '',
-    im_satz: v.im_satz_de || v.erklaerung_de || '', japanisch: v.japanisch || '', kana: v.kana || '',
-    kanji: Array.isArray(v.kanji) ? v.kanji.slice(0, 3).map(k => ({
-      zeichen: k.zeichen || '', bedeutung: k.bedeutung || '', lesung: k.lesung || '' })) : [],
-    buch: v.buch || '', seite: v.seite || ''
-  }));
-  const text = JSON.stringify({ stand: new Date().toISOString(), vokabeln: liste });
-  const datei = new File([text], 'vorleser-vokabeln.json', {type:'application/json'});
+  const datei = new File([widgetDaten()], 'vorleser-vokabeln.json', {type:'application/json'});
   try{
     if(navigator.canShare && navigator.canShare({files:[datei]})){
       await navigator.share({files:[datei], title:'Vorleser-Vokabeln'});
@@ -3777,7 +4091,106 @@ function uebSichern(){
 function vokSichern(){
   try{ localStorage.setItem(VOK_SPEICHER, JSON.stringify(vokabeln)); }catch(e){}
   vokZaehlen();
+  gistPlanen();
 }
+
+/* ══ Widget-Sync über ein privates GitHub-Gist ═════════════
+   Die App darf auf dem iPhone keine Datei still in „Dateien" legen.
+   Darum: Bei jeder Änderung an den Vokabeln (gebündelt, 4 s nach der
+   letzten) schreibt die App die Widget-Datei in ein geheimes Gist.
+   Das Scriptable-Widget liest dort — ohne Token, nur über die Gist-ID. */
+const GIST_SPEICHER = 'vorleser.gist', GIST_DATEI = 'vorleser-vokabeln.json';
+let gist = { token:'', id:'', login:'', wann:'' }, gistUhr = null, gistLaeuft = false, gistNochmal = false, gistBearbeiten = false;
+try{ gist = Object.assign(gist, JSON.parse(localStorage.getItem(GIST_SPEICHER) || '{}')); }catch(e){}
+function gistAn(){ return !!(gist.token && gist.id); }
+function gistSichern(){ try{ localStorage.setItem(GIST_SPEICHER, JSON.stringify(gist)); }catch(e){} }
+function widgetDaten(){
+  const liste = vokabeln.map(v => ({
+    wort: v.wort || '', uebersetzung: v.uebersetzung || '', aussprache: v.aussprache || '',
+    im_satz: v.im_satz_de || v.erklaerung_de || '', japanisch: v.japanisch || '', kana: v.kana || '',
+    kanji: Array.isArray(v.kanji) ? v.kanji.slice(0, 3).map(k => ({
+      zeichen: k.zeichen || '', bedeutung: k.bedeutung || '', lesung: k.lesung || '' })) : [],
+    buch: v.buch || '', seite: v.seite || ''
+  }));
+  return JSON.stringify({ stand: new Date().toISOString(), vokabeln: liste });
+}
+function gistOberflaeche(){
+  const an = gistAn() && !gistBearbeiten;
+  $('gistKurz').hidden = !an;
+  $('gistConfig').style.display = an ? 'none' : 'flex';
+  $('gistAus').hidden = !gist.token;
+  $('gistToken').value = gist.token; $('gistId').value = gist.id;
+  if(an){
+    const wann = gist.wann ? new Date(gist.wann) : null;
+    $('gistKurzText').textContent = 'Widget-Sync läuft · ' + vokabeln.length + ' Wörter'
+      + (wann && !isNaN(wann) ? ' · zuletzt ' + wann.toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'}) : '');
+    $('gistStatus').textContent = 'Gist-ID ins Widget: lang auf das Widget drücken → „Widget bearbeiten" → Parameter → ' + gist.id;
+  }
+}
+async function gistSenden(sofort){
+  if(!gist.token) return;
+  if(gistLaeuft){ gistNochmal = true; return; }
+  gistLaeuft = true;
+  try{
+    const kopf = { 'Authorization': 'Bearer ' + gist.token, 'Accept': 'application/vnd.github+json',
+                   'Content-Type': 'application/json' };
+    const body = { description: 'Vorleser — Vokabeln fürs Widget', files: {} };
+    body.files[GIST_DATEI] = { content: widgetDaten() };
+    let r;
+    if(gist.id){
+      r = await fetch('https://api.github.com/gists/' + encodeURIComponent(gist.id),
+        { method:'PATCH', headers:kopf, body:JSON.stringify(body), keepalive: !!sofort });
+    } else {
+      body.public = false;
+      r = await fetch('https://api.github.com/gists', { method:'POST', headers:kopf, body:JSON.stringify(body) });
+    }
+    if(!r.ok){
+      let g = 'HTTP ' + r.status;
+      try{ const j = await r.json(); g = (j.message || g); }catch(e){}
+      if(r.status === 401) g = 'Token ungültig';
+      else if(r.status === 403) g = 'Token hat keine „gist"-Berechtigung';
+      else if(r.status === 404) g = 'Gist nicht gefunden — ID prüfen oder leer lassen';
+      throw new Error(g);
+    }
+    const d = await r.json();
+    if(d && d.id && !gist.id){ gist.id = d.id; melde('Gist angelegt — ID steht in den Einstellungen'); }
+    if(d && d.owner && d.owner.login) gist.login = d.owner.login;
+    gist.wann = new Date().toISOString();
+    gistSichern(); gistOberflaeche();
+  }catch(e){
+    $('gistStatus').textContent = 'Widget-Sync fehlgeschlagen: ' + (e.message || e);
+  }
+  gistLaeuft = false;
+  if(gistNochmal){ gistNochmal = false; gistSenden(); }
+}
+function gistPlanen(){
+  if(!gistAn()) return;
+  clearTimeout(gistUhr);
+  gistUhr = setTimeout(() => gistSenden(), 4000);
+}
+// Beim Verlassen der App noch ausstehende Änderungen rausschicken
+document.addEventListener('visibilitychange', () => {
+  if(document.hidden && gistUhr){ clearTimeout(gistUhr); gistUhr = null; gistSenden(true); }
+});
+$('gistVerbinden').onclick = async () => {
+  gist.token = $('gistToken').value.trim();
+  gist.id = $('gistId').value.trim();
+  if(!gist.token){ melde('Erst das GitHub-Token einfügen'); return; }
+  gistBearbeiten = false;
+  gistSichern();
+  $('gistStatus').textContent = 'Wird verbunden …';
+  await gistSenden();
+  if(gistAn()) melde('Widget-Sync läuft');
+};
+$('gistAendern').onclick = () => { gistBearbeiten = true; gistOberflaeche(); };
+$('gistJetzt').onclick = () => { melde('Wird gesendet …'); gistSenden(); };
+$('gistIdKopieren').onclick = () => navigator.clipboard.writeText(gist.id).then(() => melde('Gist-ID kopiert — im Widget als Parameter eintragen'), () => melde('Kopieren nicht möglich: ' + gist.id));
+$('gistAus').onclick = () => {
+  gist = { token:'', id:'', login:'', wann:'' }; gistBearbeiten = false;
+  gistSichern(); gistOberflaeche(); melde('Widget-Sync aus');
+  $('gistStatus').textContent = 'Token: github.com → Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token → nur „gist" ankreuzen.';
+};
+gistOberflaeche();
 function vokZaehlen(){ $('vokCount').textContent = vokabeln.length ? '· ' + vokabeln.length : ''; }
 let uBearbeiten = false;
 function uebOberflaeche(){
@@ -3933,6 +4346,17 @@ async function geminiJSON(prompt, maxOut){
   return null;
 }
 
+/* Beispielsätze sind abschaltbar — ohne sie kommt die Erklärung deutlich schneller.
+   Kanji laufen als eigener, kleiner Aufruf parallel (kanjiHolen), damit die
+   Lesung sofort da ist und nicht auf die ganze Erklärung wartet. */
+let beispiele = false, autoVok = true, mitteilung = false, bisherAuto = true;
+try{
+  beispiele = localStorage.getItem('vorleser.beispiele') === '1';
+  autoVok = localStorage.getItem('vorleser.autovok') !== '0';
+  mitteilung = localStorage.getItem('vorleser.mitteilung') === '1';
+  bisherAuto = localStorage.getItem('vorleser.bisherauto') !== '0';
+}catch(e){}
+
 async function erklaeren(wort, kontext, quelle, jap){
   if(!gKeyWert) return null;
   let prompt = 'Wort: "' + wort + '" (Sprache ' + (quelle || 'unbekannt') + ').\n'
@@ -3941,19 +4365,78 @@ async function erklaeren(wort, kontext, quelle, jap){
     + '{"im_satz_de":"ein Satz auf Deutsch: was das Wort GENAU IN DIESER TEXTSTELLE ausdrückt, '
     + 'mit Bezug auf die konkrete Situation dort — keine allgemeine Definition",'
     + '"erklaerung_de":"die allgemeine Bedeutung des Wortes in einem Satz",'
-    + '"erklaerung_en":"the general meaning in one English sentence",'
-    + '"beispiel_de":"ein natürlicher deutscher Beispielsatz mit dem Wort in derselben Bedeutung wie in der Textstelle",'
-    + '"beispiel_en":"one natural English example sentence, same sense as in the passage",'
-    + '"aussprache":"IPA"';
+    + '"erklaerung_en":"the general meaning in one English sentence",';
+  if(beispiele){
+    prompt += '"beispiel_de":"ein natürlicher deutscher Beispielsatz mit dem Wort in derselben Bedeutung wie in der Textstelle",'
+      + '"beispiel_en":"one natural English example sentence, same sense as in the passage",';
+  }
+  prompt += '"aussprache":"IPA"';
   if(jap){
     prompt += ',"kana":"die übliche Lesung des japanischen Wortes ' + jap
-      + ' in Hiragana, bei Fremdwörtern in Katakana, keine Romaji",'
-      + '"kanji":[{"zeichen":"ein einzelnes Kanji aus ' + jap + '","bedeutung":"kurze deutsche Bedeutung",'
-      + '"lesung":"Kun-Lesung und On-Lesung in Kana, z. B. わる · アク"}]';
+      + ' in Hiragana, bei Fremdwörtern in Katakana, keine Romaji"';
   }
   prompt += '}';
-  return geminiJSON(prompt, 1500);
+  return geminiJSON(prompt, beispiele ? 1500 : 700);
 }
+
+/* Kanji-Aufschlüsselung sofort: Lesung des ganzen Wortes, jedes Kanji einzeln
+   mit Bedeutung, Lesungen und seinen Bestandteilen (Radikale/Teilkanji). */
+async function kanjiHolen(jap){
+  if(!gKeyWert || !jap || !/[一-鿿]/.test(jap)) return null;
+  const prompt = 'Japanisches Wort: "' + jap + '".\n'
+    + 'Antworte NUR mit JSON:\n'
+    + '{"kana":"Lesung des ganzen Wortes in Hiragana (Fremdwörter Katakana), keine Romaji",'
+    + '"kanji":[{"zeichen":"ein Kanji aus dem Wort, in Reihenfolge",'
+    + '"bedeutung":"kurze deutsche Bedeutung des Kanji",'
+    + '"lesung":"Kun- und On-Lesung in Kana, z. B. わる · アク",'
+    + '"teile":"die Bestandteile des Kanji, jeweils mit deutscher Bedeutung, z. B. 日 (Sonne) + 月 (Mond); bei einem Grundzeichen: Grundzeichen"}]}';
+  return geminiJSON(prompt, 600);
+}
+
+/* Mitteilung, wenn im Hintergrund etwas fertig wurde (nur mit Erlaubnis) */
+async function mitteilen(titel, text){
+  if(!mitteilung || !('Notification' in window) || Notification.permission !== 'granted') return;
+  try{
+    const reg = await navigator.serviceWorker.getRegistration();
+    if(reg) await reg.showNotification(titel, { body:text, tag:'vorleser-wort', silent:true });
+  }catch(e){}
+}
+$('bBeispiele').setAttribute('aria-pressed', String(beispiele));
+$('bBeispiele').onclick = () => {
+  beispiele = !beispiele;
+  try{ localStorage.setItem('vorleser.beispiele', beispiele ? '1' : '0'); }catch(e){}
+  $('bBeispiele').setAttribute('aria-pressed', String(beispiele));
+  melde(beispiele ? 'Mit Beispielsätzen (dauert etwas länger)' : 'Ohne Beispiele — Erklärung kommt schneller');
+};
+$('bAutoVok').setAttribute('aria-pressed', String(autoVok));
+$('bAutoVok').onclick = () => {
+  autoVok = !autoVok;
+  try{ localStorage.setItem('vorleser.autovok', autoVok ? '1' : '0'); }catch(e){}
+  $('bAutoVok').setAttribute('aria-pressed', String(autoVok));
+  melde(autoVok ? 'Jedes nachgeschlagene Wort wandert in die Vokabeln' : 'Nur noch per „Merken"');
+};
+$('bMitteilung').setAttribute('aria-pressed', String(mitteilung));
+$('bMitteilung').onclick = async () => {
+  if(mitteilung){
+    mitteilung = false;
+  } else {
+    if(!('Notification' in window)){ melde('Mitteilungen gibt es hier nur als App auf dem Home-Bildschirm'); return; }
+    let erlaubt = Notification.permission;
+    if(erlaubt !== 'granted'){ try{ erlaubt = await Notification.requestPermission(); }catch(e){} }
+    if(erlaubt !== 'granted'){ melde('Keine Erlaubnis — in den iPhone-Einstellungen → Mitteilungen → Vorleser'); return; }
+    mitteilung = true;
+  }
+  try{ localStorage.setItem('vorleser.mitteilung', mitteilung ? '1' : '0'); }catch(e){}
+  $('bMitteilung').setAttribute('aria-pressed', String(mitteilung));
+  melde(mitteilung ? 'Mitteilung kommt, wenn eine Übersetzung fertig ist' : 'Nur noch Hinweis in der App');
+};
+$('bBisherAuto').setAttribute('aria-pressed', String(bisherAuto));
+$('bBisherAuto').onclick = () => {
+  bisherAuto = !bisherAuto;
+  try{ localStorage.setItem('vorleser.bisherauto', bisherAuto ? '1' : '0'); }catch(e){}
+  $('bBisherAuto').setAttribute('aria-pressed', String(bisherAuto));
+  melde(bisherAuto ? '„Was bisher geschah" erscheint beim Weiterlesen' : 'Zusammenfassung nur auf Knopfdruck');
+};
 
 function sprich(text, sprache){
   try{
@@ -3966,14 +4449,62 @@ function sprich(text, sprache){
   }catch(e){}
 }
 
+let wortPausiert = false;   // haben WIR fürs Nachschlagen angehalten?
 async function wortNachschlagen(x, y){
   const t = wortAnPunkt(x, y);
   if(!t) return;
-  if(mode === 'playing') pause();
+  wortPausiert = false;
+  if(mode === 'playing'){ pause(); wortPausiert = true; }
   wortKarte(t);
 }
 
-function wortKarte(t, gespeichert){
+/* Legt ein Wort in die Vokabeln — das Objekt selbst wandert in die Liste,
+   was später noch eintrifft (Erklärung, Kanji), landet mit drin. */
+function vokAblegen(daten, t){
+  if(daten._gemerkt) return true;
+  if(vokabeln.some(v => v.wort.toLowerCase() === daten.wort.toLowerCase())) return false;
+  const i = (t && typeof t.idx === 'number') ? t.idx : idx;
+  Object.assign(daten, {
+    buch: buchTitel(), seite: units[i] ? units[i].page : (units[idx] ? units[idx].page : 0),
+    idx: i, von: parseInt(el.pFrom.value, 10) || 1, wann: new Date().toISOString()
+  });
+  vokabeln.unshift(daten);
+  daten._gemerkt = true;
+  vokSichern();
+  return true;
+}
+
+function kanjiZeichnen(inhalt, daten){
+  const z = document.createElement('div'); z.className = 'wort__zeile'; z.textContent = 'Japanisch';
+  const p = document.createElement('div'); p.className = 'wort__jp';
+  p.textContent = daten.japanisch;
+  if(daten.kana && daten.kana !== daten.japanisch){
+    const k = document.createElement('small'); k.textContent = daten.kana; p.appendChild(k);
+  } else if(!daten.kana && gKeyWert){
+    const k = document.createElement('small'); k.textContent = 'Lesung kommt …'; p.appendChild(k);
+  }
+  inhalt.appendChild(z); inhalt.appendChild(p);
+  if(Array.isArray(daten.kanji) && daten.kanji.length){
+    const z2 = document.createElement('div'); z2.className = 'wort__zeile'; z2.textContent = 'Die einzelnen Kanji';
+    inhalt.appendChild(z2);
+    daten.kanji.forEach(k => {
+      if(!k || !k.zeichen) return;
+      const r = document.createElement('div'); r.className = 'kanji';
+      const b = document.createElement('b'); b.textContent = k.zeichen;
+      const s = document.createElement('span'); s.textContent = k.bedeutung || '';
+      if(k.teile){
+        const t2 = document.createElement('small');
+        t2.style.cssText = 'display:block;color:#7A7466;font-size:12px;margin-top:2px';
+        t2.textContent = 'aus: ' + k.teile; s.appendChild(t2);
+      }
+      const i = document.createElement('i'); i.textContent = k.lesung || '';
+      r.appendChild(b); r.appendChild(s); r.appendChild(i);
+      inhalt.appendChild(r);
+    });
+  }
+}
+
+function wortKarte(t, gespeichert, vonSammlung){
   $('sheetTitel').textContent = 'Nachschlagen';
   el.bExport.hidden = true;
   el.sheetList.innerHTML = '';
@@ -4001,6 +4532,15 @@ function wortKarte(t, gespeichert){
   const daten = gespeichert || { wort:t.wort, kontext:t.kontext, uebersetzung:'', quelle, ziel,
                                  erklaerung_de:'', erklaerung_en:'', beispiel_de:'', beispiel_en:'',
                                  aussprache:'', japanisch:'', kana:'', kanji:[], im_satz_de:'' };
+  wortKarte.aktuell = daten;
+  // Zeigt die Karte gerade noch dieses Wort? Sonst meldet sich das Ergebnis per Hinweis.
+  const nochOffen = () => !el.sheet.hidden && wortKarte.aktuell === daten;
+  const fertigMelden = () => {
+    if(nochOffen()) return;
+    const text = (daten.uebersetzung || '—') + (daten.im_satz_de ? ' · ' + daten.im_satz_de : '');
+    melde('„' + daten.wort + '" — ' + (daten.uebersetzung || 'fertig') + (daten._gemerkt ? ' ✓ gemerkt' : ''));
+    mitteilen(daten.wort + ' — ' + (daten.uebersetzung || ''), text);
+  };
 
   const zeile = (titel, text, kursiv) => {
     if(!text) return;
@@ -4015,28 +4555,7 @@ function wortKarte(t, gespeichert){
     inhalt.innerHTML = '';
     u.textContent = daten.uebersetzung || '…';
     if(daten.aussprache) zeile('Aussprache', daten.aussprache);
-    if(daten.japanisch){
-      const z = document.createElement('div'); z.className = 'wort__zeile'; z.textContent = 'Japanisch';
-      const p = document.createElement('div'); p.className = 'wort__jp';
-      p.textContent = daten.japanisch;
-      if(daten.kana && daten.kana !== daten.japanisch){
-        const k = document.createElement('small'); k.textContent = daten.kana; p.appendChild(k);
-      }
-      inhalt.appendChild(z); inhalt.appendChild(p);
-      if(Array.isArray(daten.kanji) && daten.kanji.length){
-        const z2 = document.createElement('div'); z2.className = 'wort__zeile'; z2.textContent = 'Die einzelnen Kanji';
-        inhalt.appendChild(z2);
-        daten.kanji.forEach(k => {
-          if(!k || !k.zeichen) return;
-          const r = document.createElement('div'); r.className = 'kanji';
-          const b = document.createElement('b'); b.textContent = k.zeichen;
-          const s = document.createElement('span'); s.textContent = k.bedeutung || '';
-          const i = document.createElement('i'); i.textContent = k.lesung || '';
-          r.appendChild(b); r.appendChild(s); r.appendChild(i);
-          inhalt.appendChild(r);
-        });
-      }
-    }
+    if(daten.japanisch) kanjiZeichnen(inhalt, daten);
     zeile('In diesem Satz', daten.im_satz_de);
     zeile('Erklärung · Deutsch', daten.erklaerung_de);
     zeile('Explanation · English', daten.erklaerung_en);
@@ -4047,30 +4566,45 @@ function wortKarte(t, gespeichert){
   const b1 = document.createElement('button'); b1.className = 'cta'; b1.textContent = '🔊 Aussprache';
   b1.onclick = () => sprich(daten.wort, daten.quelle);
   const b2 = document.createElement('button'); b2.className = 'dunkel';
-  b2.textContent = gespeichert ? 'Gemerkt' : 'Merken';
+  b2.textContent = (gespeichert || daten._gemerkt) ? 'Gemerkt' : 'Merken';
   b2.onclick = () => {
-    if(gespeichert) return;
-    if(vokabeln.some(v => v.wort.toLowerCase() === daten.wort.toLowerCase())){ melde('Schon drin'); return; }
-    // Das Objekt selbst wandert in die Liste — was später noch eintrifft, landet mit drin
-    Object.assign(daten, {
-      buch: buchTitel(), seite: units[t.idx] ? units[t.idx].page : (units[idx] ? units[idx].page : 0),
-      idx: t.idx, von: parseInt(el.pFrom.value, 10) || 1, wann: new Date().toISOString()
-    });
-    vokabeln.unshift(daten);
-    daten._gemerkt = true;
-    vokSichern(); b2.textContent = 'Gemerkt'; melde('In die Vokabeln gelegt');
+    if(daten._gemerkt){ b2.textContent = 'Gemerkt'; return; }
+    if(vokAblegen(daten, t)){ b2.textContent = 'Gemerkt'; melde('In die Vokabeln gelegt'); }
+    else melde('Schon drin');
   };
-  const b3 = document.createElement('button'); b3.className = 'dunkel'; b3.textContent = 'Schließen';
-  b3.onclick = () => { el.sheet.hidden = true; };
+  const b3 = document.createElement('button'); b3.className = 'dunkel';
+  b3.textContent = vonSammlung ? '‹ Zur Sammlung' : 'Schließen';
+  b3.onclick = () => { if(vonSammlung) zeigeSammlung('vokabeln'); else el.sheet.hidden = true; };
+  // Weiterhören: Karte zu, Stimme läuft weiter, das Ergebnis meldet sich von selbst
+  const b4 = document.createElement('button'); b4.className = 'dunkel'; b4.textContent = '▶ Weiterhören';
+  b4.hidden = !(wortPausiert && mode === 'paused' && !gespeichert);
+  b4.onclick = () => { el.sheet.hidden = true; if(mode === 'paused') resume(); melde('Läuft weiter — Übersetzung kommt im Hintergrund'); };
   const bJ = document.createElement('button'); bJ.className = 'dunkel'; bJ.textContent = '🔊 Japanisch';
   bJ.hidden = !daten.japanisch;
-  bJ.onclick = () => sprich(daten.japanisch, 'ja');
-  knoepfe.appendChild(b1); knoepfe.appendChild(bJ); knoepfe.appendChild(b2); knoepfe.appendChild(b3);
+  bJ.onclick = () => sprich(daten.kana || daten.japanisch, 'ja');
+  knoepfe.appendChild(b1); knoepfe.appendChild(bJ); knoepfe.appendChild(b4); knoepfe.appendChild(b2); knoepfe.appendChild(b3);
   const jpKnopf = () => { bJ.hidden = !daten.japanisch; };
+
+  const kanjiNach = async () => {
+    if(!daten.japanisch || (daten.kana && Array.isArray(daten.kanji) && daten.kanji.length && daten.kanji[0].teile)) return;
+    try{
+      const k = await kanjiHolen(daten.japanisch);
+      if(!k) return;
+      if(k.kana) daten.kana = String(k.kana);
+      if(Array.isArray(k.kanji) && k.kanji.length) daten.kanji = k.kanji.filter(x => x && x.zeichen);
+      zeichnen();
+      if(daten._gemerkt) vokSichern();
+    }catch(e){}
+  };
+  const erklaerungEintragen = erk => {
+    ['im_satz_de','erklaerung_de','erklaerung_en','beispiel_de','beispiel_en','aussprache']
+      .forEach(k => { if(erk[k]) daten[k] = String(erk[k]); });
+    if(erk.kana && !daten.kana) daten.kana = String(erk.kana);
+  };
 
   if(gespeichert){
     zeichnen();
-    if(gespeichert.erklaerung_de || !gKeyWert) return;
+    if(gespeichert.erklaerung_de || !gKeyWert){ kanjiNach(); return; }
     // Erklärung fehlt noch — jetzt nachholen und mitspeichern
     daten._gemerkt = true;
     const w0 = document.createElement('div'); w0.className = 'wort__warte';
@@ -4081,12 +4615,11 @@ function wortKarte(t, gespeichert){
           const ue = await uebersetzen(daten.wort, daten.ziel || 'de');
           daten.uebersetzung = ue.text;
         }
+        kanjiNach();
         const erk = await erklaeren(daten.wort, daten.kontext || '', daten.quelle, daten.japanisch);
         w0.remove();
         if(erk){
-          ['im_satz_de','erklaerung_de','erklaerung_en','beispiel_de','beispiel_en','aussprache','kana']
-            .forEach(k => { if(erk[k]) daten[k] = String(erk[k]); });
-          if(Array.isArray(erk.kanji)) daten.kanji = erk.kanji.filter(k => k && k.zeichen);
+          erklaerungEintragen(erk);
           zeichnen(); vokSichern(); melde('Erklärung ergänzt');
         } else {
           const f = document.createElement('div'); f.className = 'wort__warte';
@@ -4117,19 +4650,20 @@ function wortKarte(t, gespeichert){
       }
       daten.uebersetzung = ue.text;
       if(erkannt) daten.quelle = erkannt;
+      // Automatisch mitnehmen — sobald die Übersetzung da ist
+      if(autoVok && vokAblegen(daten, t)){ b2.textContent = 'Gemerkt'; }
       zeichnen();
       if(daten._gemerkt) vokSichern();
       if(japanisch){
         try{ daten.japanisch = (await uebersetzen(daten.wort, 'ja')).text; zeichnen(); jpKnopf(); }catch(e){}
+        kanjiNach();                 // läuft parallel zur Erklärung — Lesung kommt sofort
       }
       const w2 = document.createElement('div'); w2.className = 'wort__warte';
-      if(gKeyWert){ w2.textContent = 'Erklärung und Beispiele werden geholt …'; inhalt.appendChild(w2); }
+      if(gKeyWert){ w2.textContent = beispiele ? 'Erklärung und Beispiele werden geholt …' : 'Erklärung wird geholt …'; inhalt.appendChild(w2); }
       const erk = await erklaeren(daten.wort, daten.kontext, daten.quelle, daten.japanisch);
       w2.remove();
       if(erk){
-        ['im_satz_de','erklaerung_de','erklaerung_en','beispiel_de','beispiel_en','aussprache','kana']
-          .forEach(k => { if(erk[k]) daten[k] = String(erk[k]); });
-        if(Array.isArray(erk.kanji)) daten.kanji = erk.kanji.filter(k => k && k.zeichen);
+        erklaerungEintragen(erk);
         zeichnen();
         if(daten._gemerkt) vokSichern();
       } else {
@@ -4139,11 +4673,13 @@ function wortKarte(t, gespeichert){
           : 'Für Erklärung und Beispiele unter Einstellungen einen Gemini-Schlüssel eintragen.';
         inhalt.appendChild(hinweis);
       }
+      fertigMelden();
     }catch(e){
       inhalt.innerHTML = '';
       const f = document.createElement('div'); f.className = 'alert';
       f.innerHTML = '<b>Übersetzung fehlgeschlagen</b>' + String(e.message || e).replace(/</g,'&lt;');
       inhalt.appendChild(f);
+      if(!nochOffen()) melde('„' + daten.wort + '": Übersetzung fehlgeschlagen');
     }
   })();
 }
@@ -4217,6 +4753,7 @@ function standAnbieten(){
   // nicht erst fragen — sofort an die letzte Stelle
   $('bWeiter').onclick();
   setTimeout(() => melde('Weiter auf Seite ' + s.seite + ' — ' + pct + ' %'), 300);
+  bisherAnbieten();
 }
 
 $('bWeiter').onclick = () => {
@@ -4340,11 +4877,164 @@ async function frageBeantworten(frage){
   return { antwort: String(a.antwort || ''), fundstellen: fund };
 }
 
+/* ══ Was bisher geschah ═══════════════════════════════════
+   Je Buch werden die Zwischenstände gemerkt: Hört man bei Seite 20 auf,
+   gibt es beim Weiterlesen eine kurze Zusammenfassung bis 20; hört man
+   bei 40 auf, beim nächsten Mal nur das Stück 20–40, dann 40–60 usw. */
+const BISHER = 'vorleser.bisher';
+function bisherAlle(){ try{ return JSON.parse(localStorage.getItem(BISHER) || '{}'); }catch(e){ return {}; } }
+function bisherListe(){ return bisherAlle()[standKey()] || []; }
+function bisherSichern(liste){
+  try{
+    const alle = bisherAlle();
+    alle[standKey()] = liste.slice(-12);
+    const k = Object.keys(alle);
+    if(k.length > 15){
+      k.sort((a, b) => ((alle[a].slice(-1)[0] || {}).wann || '').localeCompare((alle[b].slice(-1)[0] || {}).wann || ''));
+      delete alle[k[0]];
+    }
+    localStorage.setItem(BISHER, JSON.stringify(alle));
+  }catch(e){}
+}
+let bisherLaeuft = false;
+
+/* Fasst das Stück seit der letzten Zusammenfassung bis zur aktuellen Stelle zusammen */
+async function bisherErzeugen(){
+  if(!units.length || !gKeyWert) return null;
+  const liste = bisherListe();
+  const letzte = liste.length ? liste[liste.length - 1] : null;
+  const start = letzte ? letzte.bis + 1 : Math.max(0, ersterFliesstext());
+  const bis = Math.max(start, idx - 1);
+  if(bis - start < 8){ return letzte; }        // zu wenig Neues — die letzte reicht
+  let von = start;
+  let text = '';
+  // Höchstens ~60.000 Zeichen: bei langem Rückstand nur den jüngeren Teil nehmen
+  for(let i = bis; i >= start; i--){
+    if(text.length + units[i].text.length > 60000){ von = i + 1; break; }
+    text = units[i].text + ' ' + text;
+  }
+  const vonSeite = units[von].page, bisSeite = units[bis].page;
+  const titel = buchTitel();
+  const r = await geminiJSON('Du hilfst jemandem, der das Buch "' + titel + '" hört und nach einer Pause weitermacht.\n'
+    + 'Hier ist der zuletzt gehörte Abschnitt (Seite ' + vonSeite + ' bis ' + bisSeite + ')'
+    + (letzte ? ', die Zeit davor wurde schon zusammengefasst: "' + String(letzte.text || '').slice(0, 600).replace(/"/g, "'") + '"' : '') + '.\n\n'
+    + text + '\n\n'
+    + 'Fasse auf Deutsch in 4 bis 8 Sätzen zusammen, was in genau diesem Abschnitt passiert: '
+    + 'Figuren beim Namen nennen, Ort und Lage, was sich verändert hat. Nichts vorwegnehmen, was danach kommt. '
+    + 'Zum Schluss ein Satz, wo die Handlung gerade steht, damit man sofort wieder drin ist. '
+    + 'Antworte NUR mit JSON: {"zusammenfassung":"...","zuletzt":"ein Satz: wo es gerade steht"}', 1200);
+  if(!r || !r.zusammenfassung) return null;
+  const eintrag = { von, bis, vonSeite, bisSeite, text: String(r.zusammenfassung), zuletzt: String(r.zuletzt || ''),
+                    wann: new Date().toISOString() };
+  liste.push(eintrag);
+  bisherSichern(liste);
+  return eintrag;
+}
+
+function bisherKarte(e){
+  const d = document.createElement('div'); d.className = 'bisher';
+  const b = document.createElement('b');
+  const wann = new Date(e.wann);
+  b.textContent = 'Seite ' + e.vonSeite + ' – ' + e.bisSeite
+    + (isNaN(wann) ? '' : ' · ' + wann.toLocaleDateString('de-DE', {day:'2-digit', month:'2-digit'}));
+  d.appendChild(b);
+  d.appendChild(document.createTextNode(e.text));
+  if(e.zuletzt){ const z = document.createElement('div'); z.className = 'zuletzt'; z.textContent = e.zuletzt; d.appendChild(z); }
+  const f = document.createElement('div'); f.className = 'mark__foot';
+  const g = document.createElement('button'); g.textContent = 'Ab Seite ' + e.bisSeite + ' hören';
+  g.onclick = () => { el.sheet.hidden = true; jump(Math.min(e.bis + 1, units.length - 1), true); };
+  f.appendChild(g); d.appendChild(f);
+  return d;
+}
+
+function zeigeBisher(sofort){
+  $('sheetTitel').textContent = 'Was bisher geschah';
+  el.bExport.hidden = true;
+  el.sheetList.innerHTML = '';
+  el.sheet.hidden = false;
+  el.sheetList.appendChild(fragenReiter('bisher'));
+
+  if(!units.length){
+    const p = document.createElement('p'); p.className = 'sheet__leer';
+    p.textContent = 'Erst ein Buch öffnen.'; el.sheetList.appendChild(p); return;
+  }
+  if(!gKeyWert){
+    const p = document.createElement('p'); p.className = 'sheet__leer';
+    p.innerHTML = 'Dafür braucht es den Gemini-Schlüssel.<br>Einstellungen → „Gemini-Schlüssel" eintragen → Übernehmen.';
+    el.sheetList.appendChild(p); return;
+  }
+  const liste = bisherListe();
+  const letzte = liste.length ? liste[liste.length - 1] : null;
+  const start = letzte ? letzte.bis + 1 : Math.max(0, ersterFliesstext());
+  const neu = idx - 1 - start;
+
+  const zeile = document.createElement('div');
+  zeile.style.cssText = 'display:flex;gap:8px;align-items:center;margin:4px 0 10px;flex-wrap:wrap';
+  const los = document.createElement('button'); los.className = 'cta';
+  los.style.cssText = 'padding:9px 17px;font-size:13.5px';
+  const status = document.createElement('span');
+  status.style.cssText = 'font-family:var(--font-mono);font-size:10px;letter-spacing:.08em;color:#8E8878';
+  if(neu >= 8){
+    los.textContent = 'Zusammenfassen: Seite ' + units[start].page + ' – ' + (units[idx - 1] ? units[idx - 1].page : units[idx].page);
+    status.textContent = 'seit dem letzten Stand';
+  } else {
+    los.textContent = letzte ? 'Noch einmal zusammenfassen' : 'Zusammenfassen';
+    status.textContent = letzte ? 'nichts Neues seit Seite ' + letzte.bisSeite : 'noch zu wenig gehört';
+    if(!letzte) los.disabled = true;
+    if(letzte) los.onclick = () => { liste.pop(); bisherSichern(liste); zeigeBisher(true); };
+  }
+  zeile.appendChild(los); zeile.appendChild(status);
+  el.sheetList.appendChild(zeile);
+  const ergebnisse = document.createElement('div');
+  el.sheetList.appendChild(ergebnisse);
+  liste.slice().reverse().forEach(e => ergebnisse.appendChild(bisherKarte(e)));
+
+  const holen = async () => {
+    if(bisherLaeuft) return;
+    bisherLaeuft = true;
+    los.disabled = true; los.textContent = 'Wird zusammengefasst …';
+    status.textContent = 'Gemini liest den Abschnitt';
+    try{
+      const e = await bisherErzeugen();
+      if(e && !el.sheet.hidden && $('sheetTitel').textContent === 'Was bisher geschah') zeigeBisher();
+      else if(e) melde('„Bisher" liegt bereit — unter Fragen → Bisher');
+      else status.textContent = 'Keine Zusammenfassung' + (geminiGrund ? ' — ' + geminiGrund : '');
+    }catch(err){ status.textContent = 'Fehler: ' + (err.message || err); }
+    bisherLaeuft = false;
+    if(!el.sheet.hidden && los.isConnected){ los.disabled = false; }
+  };
+  if(neu >= 8){ los.onclick = holen; if(sofort) holen(); }
+}
+
+/* Beim Weiterlesen von selbst: nur wenn seit dem letzten Stand genug dazukam */
+function bisherAnbieten(){
+  if(!bisherAuto || !gKeyWert || !units.length || bisherLaeuft) return;
+  const liste = bisherListe();
+  const letzte = liste.length ? liste[liste.length - 1] : null;
+  const start = letzte ? letzte.bis + 1 : Math.max(0, ersterFliesstext());
+  if(idx - 1 - start < 12) return;
+  if(!el.sheet.hidden) return;
+  setTimeout(() => { if(mode !== 'playing' && el.sheet.hidden) zeigeBisher(true); }, 700);
+}
+
+function fragenReiter(aktiv){
+  const leiste = document.createElement('div');
+  leiste.style.cssText = 'display:flex;gap:8px;margin:14px 0 6px;flex-wrap:wrap;align-items:center';
+  [['fragen','Fragen'],['bisher','Bisher']].forEach(([id, name]) => {
+    const b = document.createElement('button'); b.className = 'dunkel'; b.textContent = name;
+    if(aktiv === id)b.classList.add('aktiv');
+    b.onclick = () => { if(id === 'bisher') zeigeBisher(); else zeigeFragen(); };
+    leiste.appendChild(b);
+  });
+  return leiste;
+}
+
 function zeigeFragen(){
   $('sheetTitel').textContent = 'Im Buch fragen';
   el.bExport.hidden = true;
   el.sheetList.innerHTML = '';
   el.sheet.hidden = false;
+  el.sheetList.appendChild(fragenReiter('fragen'));
 
   const kasten = document.createElement('div');
   kasten.style.cssText = 'margin:14px 0 6px';
@@ -4432,15 +5122,8 @@ el.sheet.onclick = e => { if(e.target === el.sheet) el.sheet.hidden = true; };
 
 function markenExport(){
   if(!marken.length){ melde('Nichts zu sichern'); return; }
-  let out = 'Gemerkte Sätze\n\n';
-  const buecher = {};
-  marken.forEach(m => { (buecher[m.buch] = buecher[m.buch] || []).push(m); });
-  Object.keys(buecher).forEach(n => {
-    out += '\n## ' + n + '\n\n';
-    buecher[n].forEach(m => { out += '- „' + m.satz + '" (Seite ' + m.seite + ')\n'; });
-  });
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([out], {type:'text/plain;charset=utf-8'}));
+  a.href = URL.createObjectURL(new Blob([markenText()], {type:'text/plain;charset=utf-8'}));
   a.download = 'gemerkte-saetze.txt';
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
@@ -4537,22 +5220,61 @@ try{
 }catch(e){}
 
 /* ══ Als App auf dem Home-Bildschirm ═════════════════════ */
+/* Automatische Updates: Sobald eine neue Fassung übernommen hat, startet
+   die App von selbst neu — mit demselben Buch an derselben Stelle.
+   Läuft gerade die Stimme, wartet der Neustart bis zum nächsten Anhalten. */
+let updateWartet = false, updateGestartet = false;
+function neuStarten(){
+  if(updateGestartet) return;
+  updateGestartet = true;
+  try{ standSichern(true); }catch(e){}
+  try{
+    if(buchAktuell && buchAktuell.id != null) localStorage.setItem('vorleser.wiederoeffnen', String(buchAktuell.id));
+    localStorage.setItem('vorleser.updateVon', APP_VERSION);
+  }catch(e){}
+  location.reload();
+}
+function updatePruefen(){
+  if(!updateWartet) return;
+  setTimeout(() => { if(mode !== 'playing') neuStarten(); }, 1200);
+}
 if('serviceWorker' in navigator && location.protocol === 'https:'){
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('sw.js', {updateViaCache:'none'}).then(reg => {
-      try{ reg.update(); }catch(e){}
-      let schonNeu = false;
+      const nachsehen = () => { try{ reg.update(); }catch(e){} };
+      nachsehen();
+      // Beim Zurückkommen in die App und alle 20 Minuten nachsehen
+      document.addEventListener('visibilitychange', () => { if(!document.hidden) nachsehen(); });
+      setInterval(nachsehen, 20 * 60000);
       navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if(schonNeu) return;
-        schonNeu = true;
-        // Nie mitten im Hören oder mit offenem Buch neu starten
-        if(typeof mode !== 'undefined' && (mode === 'playing' || mode === 'paused')) return;
-        if(typeof units !== 'undefined' && units.length) return;
-        location.reload();
+        if(mode === 'playing'){
+          updateWartet = true;
+          melde('Neue Version ist da — startet nach dem Anhalten');
+          return;
+        }
+        melde('Neue Version — App startet neu …');
+        setTimeout(neuStarten, 500);
       });
     }).catch(()=>{});
   });
 }
+// Nach einem Neustart: letztes Buch von selbst wieder öffnen und Version melden
+(async () => {
+  let id = null, von = '';
+  try{
+    id = localStorage.getItem('vorleser.wiederoeffnen');
+    von = localStorage.getItem('vorleser.updateVon') || '';
+    localStorage.removeItem('vorleser.wiederoeffnen');
+    localStorage.removeItem('vorleser.updateVon');
+  }catch(e){}
+  if(von && von !== APP_VERSION) setTimeout(() => melde('Aktualisiert: ' + von + ' → ' + APP_VERSION), 1200);
+  if(!id) return;
+  try{
+    const liste = await buecherHolen();
+    const e = liste.find(b => String(b.id) === String(id));
+    if(e) buchOeffnen(e);
+  }catch(e){}
+})();
 const iOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
          || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const alsApp = window.matchMedia('(display-mode: standalone)').matches
@@ -4563,7 +5285,7 @@ if(iOS && !alsApp) $('installTipp').hidden = false;
    Cloud-Stimmen sind MP3s und dürfen im Hintergrund weiterlaufen. */
 if(iOS){
   document.addEventListener('visibilitychange', () => {
-    if(document.hidden && mode === 'playing' && !wolkeAn()) pause();
+    if(document.hidden && mode === 'playing' && (stillAn || !wolkeAn())) pause();
   });
 }
 
